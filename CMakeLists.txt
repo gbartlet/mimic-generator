@@ -1,0 +1,8 @@
+cmake_minimum_required (VERSION 2.6)
+project (mimic)
+file (GLOB SOURCES "src/*.cpp")
+include_directories(include)
+add_executable(mimic ${SOURCES})
+set (TestProj_VERSION_MAJOR 1)
+set (TestProj_VERSION_MINOR 0)
+set (CMAKE_CXX_FLAGS "-Wall -g -DASIO_STANDALONE --std=c++11")

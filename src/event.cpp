@@ -3,7 +3,13 @@
 #include <algorithm>
 #include <vector>
 #include <queue> 
+#include <thread>
 #include "mimic.h"
+
+
+template<typename T, typename ...Args> std::unique_ptr<T> make_unique( Args&& ...args ) {
+    return std::unique_ptr<T>( new T( std::forward<Args>(args)... ) );
+}
 
 class compareEvents {
     public:
@@ -16,9 +22,8 @@ class EventHandler {
     public:
         EventHandler();
         void add_event(Event e);
-        std::shared_ptr<Event> next_event();
+        std::unique_ptr<Event> next_event();
     private:
-        const std::string * filename;
         std::ofstream eventsstream;
         std::priority_queue <Event, std::vector<Event>, compareEvents > eventHeap;
 };
@@ -30,22 +35,41 @@ void EventHandler::add_event(Event e) {
     eventHeap.push(e);
 }
 
-std::shared_ptr<Event> EventHandler::next_event() {
-    std::shared_ptr<Event> e_shr (nullptr);
+std::unique_ptr<Event> EventHandler::next_event() {
+    std::unique_ptr<Event> e_shr (nullptr);
     if(eventHeap.empty() == true) {
         std::cout << "Heap empty.\n";
         return e_shr;
     }
-    e_shr = std::make_shared<Event>(eventHeap.top());
+    e_shr = make_unique<Event>(eventHeap.top());
     eventHeap.pop();
     return e_shr;
 }
 
+class FileHandler {
+    public:
+        FileHandler(const EventHandler * eh);
+        void manage_files();
+    private:
+        void process_conns();
+        const std::string * filename;    
+};
+
+FileHandler::FileHandler(const EventHandler * eh) {
+
+};
+
+void FileHandler::manage_files() {
+};
+
+void FileHandler::process_conns() {
+};
+
 // STUB testing event 
-int main() {
+int eventmain() {
     std::cout << "hi\n";
     Event e1, e2, e3, e4;
-    std::shared_ptr<Event> eptr1, eptr2;
+    std::unique_ptr<Event> eptr1, eptr2;
     
     e1.ms_from_start = 2;
     e2.ms_from_start = 3;
@@ -59,13 +83,9 @@ int main() {
     eh.add_event(e4);
     
     eptr1 = eh.next_event();
-    if(eptr1 == nullptr) {
-        std::cout << "No events left in heap.\n"; 
-    }
-    else {
+    while(eptr1 != nullptr) {
         std::cout << "Top: " << eptr1->ms_from_start << "\n";
+        eptr1 = eh.next_event();
     }
-    eptr2 = eptr1;
-    std::cout << "Refence count for eptr1:" << eptr1.use_count() << "\n";
     std::exit(1);
 }

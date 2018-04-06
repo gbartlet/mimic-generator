@@ -9,19 +9,21 @@ enum EventType {
                 WAIT,		/* Wait {value}ms before next event. */
                 SEND, 		/* Send {value}bytes of data. */
                 SRV_START,	/* Bring up a server. */ 
-                SRV_END 	/* Bring down a server. */
+                SRV_END, 	/* Bring down a server. */
+                NONE		/* Dummy value. */
                 };
                         
 class Event {
     public:
-        int * sockptr;
-        long int ms_from_start;	 /* Keep track of event time relative to start in ms. */
-        EventType type;        
-        long int conn_id;
+        int * sockptr = nullptr;
+        long int ms_from_start = 0;	 /* Keep track of event time relative to start in ms. */
+        EventType type = NONE;        
+        long int conn_id = -1;
         struct sockaddr_in target_addr;
-        int target_port;		/* What this target means is dependent on what type of event this is. */
-        long int value;		/* What this value holds depends on what type of event this is. */
+        int target_port = 0;		/* What this target means is dependent on what type of event this is. */
+        long int value = 0;		/* What this value holds depends on what type of event this is. */
 };
+
 
 
 

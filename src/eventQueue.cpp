@@ -1,4 +1,8 @@
 #include <stdlib.h>
+#include <iostream>
+#include <thread>
+#include <unistd.h>
+#include <time.h>
 #include "mimic.h"
 
 
@@ -24,11 +28,13 @@ class EventQueue {
             printf("Exiting due to lack of atomic lock-free support. Check that your compiler is ISO C++ 2017 or 2020 compliant.");
             exit(1);
         #endif
+        int numEvents = 1;
     public:
         EventQueue() {
             std::shared_ptr<Event> dummy = nullptr;
             eventJob * d = new eventJob(dummy);
             last.store(d, std::memory_order_relaxed); 
+            divider.store(d, std::memory_order_relaxed);
             first = d;
         }
         ~EventQueue() {
@@ -40,36 +46,71 @@ class EventQueue {
         }
         void addEvent(std::shared_ptr<Event> e) {
             //last->next = new eventJob(e);
-            last.load()->next = new eventJob(e);
+            eventJob * lastNode = last.load();
+            lastNode->next = new eventJob(e);
             
             //last = last->next;
-            last = last.load()->next;
-            
-            while(first != divider) {
+            last.store(lastNode->next);
+            numEvents++;
+            while(first != divider.load()) {
                 eventJob * tmp = first;
                 first = first->next;
-                delete tmp;
+                delete tmp; 
+                numEvents--;
             }
+            std::cout << "Num events: " << numEvents << "\n";
         }
-        bool getEvent(std::shared_ptr<Event> job) {
-            if(divider.load() != last.load()) {
+        bool getEvent(std::shared_ptr<Event>& job) {
+            eventJob * dividerNode = divider.load();
+            if(dividerNode != last.load()) {
                 //job = divider->next->eptr;
-                job = divider.load()->next->eptr;
-                //divider = divider->next;
-                divider = divider.load()->next;
-                return true;
+                if (dividerNode->next != nullptr) {
+                    job = dividerNode->next->eptr;
+                    //divider = divider->next;
+                    divider.store(dividerNode->next);
+                    return true;
+                }
             }
             return false;
         }
 };
 
+void produceEventsTest(EventQueue* eq, int numEvents, int maxWait) {
+    for(int i=0; i<numEvents; i++) {
+        Event e;
+        e.ms_from_start = 2;
+        (*eq).addEvent(std::make_shared<Event>(e));
+        usleep(rand() % maxWait);
+    }
+}
+
+void consumeEventsTest(EventQueue* eq, int numEvents, int maxWait) {
+    std::shared_ptr<Event> job;
+    int totalRetrieved = 0;
+    for(int i=0; i<numEvents;) {
+        if((*eq).getEvent(job)) {
+            assert(job->ms_from_start == 2);
+            usleep(rand() % maxWait);
+            totalRetrieved++;
+            if(i%1000 == 0) {
+                std::cout << "Total events retrieved so far: " << totalRetrieved << "\n";
+            }
+            i++;
+        }
+    }        
+    std::cout << "Total events retrieved so far: " << totalRetrieved << "\n";
+}
+
 // STUB tester for EventQueue
 int main() {
-    Event e1, e2, e3, e4;
-    e1.ms_from_start = 2;
-    e2.ms_from_start = 3;
-    e3.ms_from_start = 2;
-    e4.ms_from_start = 1;
-    EventQueue eq;
-    eq.addEvent(std::make_shared<Event>(e1));
+    srand(time(NULL));
+    int numEvents = 1000000;
+    int maxWait = 1000;
+    EventQueue* eq = new EventQueue();
+    std::thread producer(produceEventsTest, eq, numEvents, maxWait);
+    std::thread consumer(consumeEventsTest, eq, numEvents, maxWait);
+    producer.join();
+    consumer.join();
+    delete eq;
+    std::cout << "Success. Added and retrieved " << numEvents << " events.\n";
 }

@@ -80,7 +80,7 @@ void produceEventsTest(EventQueue* eq, int numEvents, int maxWait) {
         Event e;
         e.ms_from_start = 2;
         (*eq).addEvent(std::make_shared<Event>(e));
-        usleep(rand() % maxWait);
+        //usleep(rand() % maxWait);
     }
 }
 
@@ -90,7 +90,7 @@ void consumeEventsTest(EventQueue* eq, int numEvents, int maxWait) {
     for(int i=0; i<numEvents;) {
         if((*eq).getEvent(job)) {
             assert(job->ms_from_start == 2);
-            usleep(rand() % maxWait);
+            //usleep(rand() % maxWait);
             totalRetrieved++;
             if(i%1000 == 0) {
                 std::cout << "Total events retrieved so far: " << totalRetrieved << "\n";
@@ -104,8 +104,8 @@ void consumeEventsTest(EventQueue* eq, int numEvents, int maxWait) {
 // STUB tester for EventQueue
 int main() {
     srand(time(NULL));
-    int numEvents = 1000000;
-    int maxWait = 1000;
+    int numEvents = 10;
+    int maxWait = 100;
     EventQueue* eq = new EventQueue();
     std::thread producer(produceEventsTest, eq, numEvents, maxWait);
     std::thread consumer(consumeEventsTest, eq, numEvents, maxWait);

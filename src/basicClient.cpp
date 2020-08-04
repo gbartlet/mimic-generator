@@ -230,17 +230,12 @@ static void so_thread_entry(void *arg)
 }
 int main(int argc, char * argv[]) {
 
-    //unsigned int ports [8] ={5454,5455,5456,5457,5458,5459,5460,5461};
-    unsigned int ports [1024];
-    int i,j,k;    
-    int n;  
-    memset(freq, 0,sizeof(freq));
-    signal(SIGINT, intHandler);
-    
-    unsigned int start_port = 5454;
-    for(i=0; i<1024; i++) {
-        ports[i] = start_port + i;
-    }
+  unsigned int ports [2] ={5454,5455};
+  int i,j,k;    
+  int n;  
+  memset(freq, 0,sizeof(freq));
+  signal(SIGINT, intHandler);
+  
 
 ///////////////////////////////
     //pthread_t threadstime; 
@@ -266,7 +261,7 @@ int main(int argc, char * argv[]) {
     std::thread workers[10];
     for (i=0;i<threadingCount;i++){
         printf("threadingCount = %d \n", threadingCount);
-        int socketperthread = noconnection/threadingCount ;
+        int socketperthread = 2; //noconnection/threadingCount ;
         printf ("gonna set %d socket per threads \n", socketperthread);
         for (j =0 ;j < socketperthread;j++ ){
             init(ports[curport], i);

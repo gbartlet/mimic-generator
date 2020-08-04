@@ -5,6 +5,8 @@
 
 enum Role {SERVER,CLIENT};
 
+EventQueue* fileQ = NULL;
+
 void usage(char* progName) {
   std::cout << progName << "[-F|-C|-E|-r {server | client}|-c CONNCOUNT |-e EVENTCOUNT|-s MAXSIZESEND]" << std::endl
        << "\t -h \t prints this message." << std::endl 
@@ -25,7 +27,7 @@ void eventHandlerTest(std::string remoteHost, Role myRole) {
   int notifierFD = createEventFD();
   EventNotifier* loadMoreNotifier = new EventNotifier(notifierFD, "Test file notifier.");
   EventQueue * acceptQ = new EventQueue("Accept events");
-  EventQueue * fileQ = new EventQueue("File events.");
+  //EventQueue * fileQ = new EventQueue("File events.");
   EventQueue * recvQ = new EventQueue("Received events");
   EventQueue * sentQ = new EventQueue("Sent events");
   EventQueue * serverQ = new EventQueue("Sever start/stop events");
@@ -78,9 +80,10 @@ void eventHandlerTest(std::string remoteHost, Role myRole) {
 
   eh->startup();
   std::thread eventHandlerThread(&EventHandler::loop, eh, startPoint);
-  isRunning.store(false);
+  isRunning.store(true);
   eventHandlerThread.join();
 }
+
 
 void fileWorkerTest(std::string& tmpDir) {
   createDummyFiles(tmpDir);
@@ -102,7 +105,7 @@ void fileWorkerTest(std::string& tmpDir) {
   eventsFiles.push_back(events1FileName);
   eventsFiles.push_back(events2FileName);
   
-  EventQueue * fileQ = new EventQueue("Test File Worker: Out Events");
+  fileQ = new EventQueue("Test File Worker: Out Events");
   int notifierFD = createEventFD();
   EventNotifier* loadMoreNotifier = new EventNotifier(notifierFD, "Test file notifier.");
   FileWorker* fw = new FileWorker(loadMoreNotifier, fileQ,ipFileName,connFileName,eventsFiles);
@@ -112,8 +115,8 @@ void fileWorkerTest(std::string& tmpDir) {
   std::chrono::high_resolution_clock::time_point startPoint = std::chrono::high_resolution_clock::now();
   std::thread fileWorkerThread(&FileWorker::loop, fw, startPoint);
   
-  
-  int eventsToPull = 1000000;
+  /*  
+  int eventsToPull = 10000;
   int numEventsPulled = 0;
   int lastEventCountWhenRequestingForMore = 0;
   while(numEventsPulled < eventsToPull) {
@@ -126,7 +129,7 @@ void fileWorkerTest(std::string& tmpDir) {
     /*else {
       std::cout << "UNDERFLOW IN EVENTS!!!!!! (pulled " <<numEventsPulled << " events)" << std::endl;
     }*/
-    if(numEventsPulled % (maxQueuedFileEvents/10) == 0 && lastEventCountWhenRequestingForMore != numEventsPulled) {
+    /*if(numEventsPulled % (maxQueuedFileEvents/10) == 0 && lastEventCountWhenRequestingForMore != numEventsPulled) {
       lastEventCountWhenRequestingForMore = numEventsPulled;
       std::cout << "Requesting more events get loaded. Pulled " << numEventsPulled << " events." << std::endl;
       loadMoreNotifier->sendSignal();
@@ -134,10 +137,10 @@ void fileWorkerTest(std::string& tmpDir) {
   }
   
   isRunning.store(false);
-  
-  fileWorkerThread.join();  
+  */
+  fileWorkerThread.detach();  
   std::cout << std::setprecision(5);
-  std::cout << "Pulled " << eventsToPull << " events in: " << msSinceStart(startPoint)/1000 << " s" << std::endl;
+  //std::cout << "Pulled " << eventsToPull << " events in: " << msSinceStart(startPoint)/1000 << " s" << std::endl;
 }
 
 void createDummyFiles(std::string& tmpDir) {
@@ -168,7 +171,7 @@ void createDummyFiles(std::string& tmpDir) {
   float stime = 0;
   for(int i=0; i<500; i++) {
     float r = 0.001 + static_cast <float> (std::rand())/(static_cast <float> (RAND_MAX/(.1-0.001)));
-    connFile << "CONN," << stime << "," << i << ",5.5.5.5,5005,->,1.1.1.1,5005" << std::endl;
+    connFile << "CONN," << stime << "," << i << ",5.5.5.5,5005,->,10.1.1.3,5005" << std::endl;
     stime = stime + r;
   }  
   connFile.close();
@@ -221,8 +224,8 @@ int main(int argc, char* argv[]) {
           testFileEventsFlag = true;
         }
         else if(arg == "-C") {
-          testAllFlag = false;
-          testConnectionsFlag = true;
+          testAllFlag = true;
+          testConnectionsFlag = false;
         }
         else if(arg == "-E") {
           testAllFlag = false;
@@ -276,7 +279,7 @@ int main(int argc, char* argv[]) {
     fileWorkerTest(tmpDir);
   }
   
-  std::cout << testConnectionsFlag << std::endl;
+  std::cout <<"testevents flag "<<testEventsFlag<< std::endl;
   
   if(testAllFlag || testConnectionsFlag || testFileEventsFlag) {
     if(testAllFlag || testConnectionsFlag) {

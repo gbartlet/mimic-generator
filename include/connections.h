@@ -2,6 +2,8 @@
 #define CONNECTIONS_H
 #include "mimic.h"
 
+enum conn_state {LISTENING, CONNECTING, EST, DONE};
+
 typedef std::unordered_map<std::string, long int> stringToConnIDMap;
 
 std::string getConnString(const struct sockaddr_in* src, const struct sockaddr_in* dst, bool* success);

@@ -20,6 +20,7 @@
 
 
 
+/*
 class Connection {
     public:
         bool isServer = true;
@@ -46,7 +47,7 @@ class Connection {
         bool blocked();
         bool nextEvent(std::shared_ptr<Event>& e);
 
-        /* For printing/logging only. */
+        // For printing/logging only.
         std::string dstAddr();
 
     private:
@@ -55,6 +56,7 @@ class Connection {
         int waitingToRecv = 0;
         EventQueue* events;
 };
+*/
 
 class EventHandler {
     private:
@@ -82,6 +84,7 @@ class EventHandler {
         /* We produce these. */
         EventQueue* serverStartnStopReq;
         EventQueue* sendReq;
+	EventHeap* eventsToHandle;
         
         /* Data management structures. */
         ConnectionPairMap * connIDToConnectionMap;
@@ -90,12 +93,15 @@ class EventHandler {
         std::unordered_map<long int, int> connToSockfdIDMap;
         std::unordered_map<long int, int> connToWaitingToRecv;
         std::unordered_map<long int, int> connToWaitingToSend;
+	std::unordered_map<long int, int> connToDelay;
+	std::unordered_map<long int, long int> connToLastPlannedEvent;
+	std::unordered_map<long int, conn_state> connState;
         std::unordered_map<long int, long int> connToLastCompletedEvent;
-        std::unordered_map<long int, EventQueue*> connToEventQueue;
+        std::unordered_map<long int, EventQueue*>* connToEventQueue;
         
         EventHeap waitHeap;
 
-        void processAcceptedEvents();        
+        void processAcceptEvents(long int);        
         void processSentEvents();
         void processRECVedEvents();
         void popWaitEvents();
@@ -104,11 +110,12 @@ class EventHandler {
         void checkDeferred(int long now);
         bool readyForEvent(long int connID, long int delta, long int now);
         void dispatch(std::shared_ptr<Event> dispatchJob, long int now);
-        void newConnectionUpdate(int sockfd, long int connID, long int now);
+        void newConnectionUpdate(int sockfd, long int connID, long int planned, long int now);
+	void connectionUpdate(long int connID, long int planned, long int now);
         bool acceptNewConnection(struct epoll_event *poll_e, long int now);
-        
+	void getNewEvents(long int conn_id);	
     public:
-        EventHandler(EventNotifier* loadMoreNotifier, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap);
+        EventHandler(EventNotifier* loadMoreNotifier, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventQueue*>* c2eq);
         ~EventHandler();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

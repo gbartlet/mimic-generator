@@ -38,6 +38,7 @@ class FileWorker {
     
         /* File worker thread - takes in files and prodcues queue of events. */
         EventQueue* outEvents;
+	EventQueue* acceptEvents;
         std::vector <std::vector <std::string>> loadFile(std::istream* infile, int numFields=3, int numRecords=-1);
         std::vector <std::vector <std::string>> loadMMapFile(void * mmapData, int numFields, int numRecords);
         bool isMyIP(std::string IP);
@@ -71,11 +72,11 @@ class FileWorker {
         long int loopDuration = 0;
         long int loopEventCount = 0;
         long int lastEventTime = 0;
-        
+        std::unordered_map<long int, EventQueue*>* ConnectionEQ = 0;
         bool useMMap;
 
     public:
-        FileWorker(EventNotifier* loadMoreNotifier, EventQueue* out, std::string& ipFile, std::string& connFile, std::vector<std::string>& eFiles, bool useMMap=true);
+        FileWorker(EventNotifier* loadMoreNotifier, EventQueue* out, EventQueue* accept, std::unordered_map<long int, EventQueue*>* c2eq, std::string& ipFile, std::string& connFile, std::vector<std::string>& eFiles, bool useMMap=true);
         ~FileWorker();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

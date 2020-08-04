@@ -6,7 +6,7 @@
 
 
 ServerWorker::ServerWorker(EventQueue* in, EventQueue* out) {
-    // If we want the server worker as it's own thread...
+    // If we want the server worker as its own thread...
     inEvents = in;
     outEvents = out;
     srvStringToSockfd = {};
@@ -56,6 +56,7 @@ bool ServerWorker::handleAccept(Event * job, long int now) {
     
     /* Accept and make sure new socket is nonblocking. */
     newSockfd = accept(job->sockfd, &in_addr, (socklen_t*)&in_addr_size);
+    std::cerr<<"Got accept on listen sock "<<job->sockfd<<" new sock "<<newSockfd<<std::endl;
     int status = 0;
     status = setIPv4TCPNonBlocking(newSockfd);
     if(status < 0) {
@@ -120,13 +121,17 @@ bool ServerWorker::handleSrvStart(Event * job) {
         std::cerr << "ERROR: Failed to bind to " << servString << std::endl; 
         return false;
     }
-    
+
     if(listen(sockfd, MAX_BACKLOG_PER_SRV) == -1) {
         perror("Listen failed");
         return false;
     }
-    
-    /* Add to epoll. */
+    std::cout<<"Server listening, should accept next, added socket "<<sockfd<<" and accept event\n";
+    Event e = *job;
+    e.type = ACCEPT;
+    e.sockfd = sockfd;
+    outEvents->addEvent(std::make_shared<Event>(e));
+    /* Add to epoll. 
     static struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLPRI | EPOLLERR | EPOLLHUP;
     ev.data.fd = sockfd;
@@ -135,7 +140,7 @@ bool ServerWorker::handleSrvStart(Event * job) {
         perror("epoll_ctr, ADD");
         return false;
     }
-    
+    */
     /* Update our records. */
     srvStringToSockfd[servString] = sockfd;
     sockfdToConnCount[sockfd] = 0;    
@@ -167,6 +172,7 @@ bool ServerWorker::handleJob(Event * job, long int now) {
 }
 
 void ServerWorker::loop(std::chrono::high_resolution_clock::time_point startTime) {
+
     while(isRunning.load()) {
         /* Get a "now" time for our loop iteration. */
         long int now = msSinceStart(startTime);
@@ -179,7 +185,10 @@ void ServerWorker::loop(std::chrono::high_resolution_clock::time_point startTime
             job.reset();
             myJobsNextTime = myJobs.nextEventTime();
         }*/
-    
+
+
+    /* Event loop. */
+
         /* Pull events from IN queue. */
         std::shared_ptr<Event> job;
         long int nextEventTime = 0;

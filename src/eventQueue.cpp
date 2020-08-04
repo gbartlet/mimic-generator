@@ -30,7 +30,7 @@ int compareEvents::operator()(const Event& e1, const Event& e2) {
 // consumer threads which consume from multiple EventQueues.
 
 //class EventQueue {
-        EventQueue::EventQueue(std::string name) {
+EventQueue::EventQueue(std::string name) {
             #ifndef __cpp_lib_atomic_is_always_lock_free
                 std::cout << "Exiting due to lack of atomic lock-free support. Check that your compiler is ISO C++ 2017 or 2020 compliant.\n" ;
                 exit(1);
@@ -54,23 +54,28 @@ int compareEvents::operator()(const Event& e1, const Event& e2) {
             while(first != divider.load()) {
                 eventJob * tmp = first;
                 first = first->next;
-                std::cout << "Use count of epointer before removal of job" << tmp->eptr.use_count() << "\n";
+		if (DEBUG)
+		  std::cout << "Use count of epointer before removal of job" << tmp->eptr.use_count() << "\n";
                 tmp->eptr.reset();
                 delete tmp; 
                 numEvents--;
             }
             return numEvents;
         }
+
+        int EventQueue::getLength() {
+	  return numEvents;
+        }
+
         void EventQueue::addEvent(std::shared_ptr<Event> e) {
-            //last->next = new eventJob(e);
             eventJob * lastNode = last.load();
             lastNode->next = new eventJob(e);
             
-            //last = last->next;
             last.store(lastNode->next);
             numEvents++;
-            cleanUp();            
-            std::cout << qName << ":Num events: " << numEvents << "\n";
+            cleanUp();
+	    if (DEBUG)
+	      std::cout << qName << ":Num events: " << numEvents << "\n";
         }
         
         
@@ -83,7 +88,8 @@ int compareEvents::operator()(const Event& e1, const Event& e2) {
                     job = dividerNode->next->eptr;
                     //divider = divider->next;
                     divider.store(dividerNode->next);
-                    std::cout << qName << "JOB REMOVED" << std::endl;
+		    if (DEBUG)
+		      std::cout << qName << "JOB REMOVED" << std::endl;
                     return true;
                 }
             }
@@ -97,7 +103,7 @@ int compareEvents::operator()(const Event& e1, const Event& e2) {
                     return t;
                 }
             }
-            std::cout << qName << "Time checked. " << std::endl;
+            //std::cout << qName << "Time checked. " << std::endl;
             return -1;
         }
 //}
@@ -129,6 +135,22 @@ std::unique_ptr<Event> EventHeap::nextEvent() {
     e_shr = std::make_unique<Event>(eventHeap.top());
     eventHeap.pop();
     return e_shr;
+}
+
+int EventHeap::getLength() {
+  return eventHeap.size();
+}
+
+void EventHeap::print() {
+  jobHeap temp;
+   while(!eventHeap.empty()) {
+     Event e = eventHeap.top();
+     eventHeap.pop();
+     std::cout <<e.conn_id<<":"<<e.event_id<<":"<<EventNames[e.type]<<":"<<e.ms_from_start<<" ";
+     temp.push(e);
+   }
+   std::cout << '\n';
+   eventHeap = temp;
 }
 
 

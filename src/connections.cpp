@@ -72,7 +72,8 @@ std::string getConnString(const struct sockaddr_in* src, const struct sockaddr_i
 int setIPv4TCPNonBlocking(int sockfd) {
     int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
     if(status == -1) {
-        perror("Had trouble getting non-blocking socket."); 
+        perror("Had trouble getting non-blocking socket.");
+	std::cerr<<" For socket "<<sockfd<<std::endl;
         return(-1);
     }
     return status;
@@ -81,6 +82,7 @@ int setIPv4TCPNonBlocking(int sockfd) {
 int getIPv4TCPSock(const struct sockaddr_in * sa) {
     /* Get non-blocking socket. */
     int s = socket(AF_INET, SOCK_STREAM, 0);
+    
     setIPv4TCPNonBlocking(s);
 
     if(s == -1) 
@@ -88,10 +90,15 @@ int getIPv4TCPSock(const struct sockaddr_in * sa) {
 
     /* If we were given an address, bind to it. */
     if(sa != NULL) {
-        if(bind(s, (const struct sockaddr *)sa, sizeof(struct sockaddr_in)) <0) {
-            perror("bind failed.");
-            return(-1);
-        }
+      int optval = 1;
+      setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+
+      if(bind(s, (const struct sockaddr *)sa, sizeof(struct sockaddr_in)) <0) {
+	char msg[100];
+	sprintf(msg, "bind failed %u\n", sa->sin_addr.s_addr);
+	perror(msg);
+	return(-1);
+      }
     }
 
     return s;

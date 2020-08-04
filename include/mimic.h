@@ -12,9 +12,11 @@
 #include <iostream>
 #include <unordered_map>
 #include <chrono>
+#include <string>
 #include <condition_variable>
 #include "connections.h"
 
+#define DEBUG 1
 
 /* Mutexes and condition variables. */
 extern std::mutex fileHandlerMTX;
@@ -22,10 +24,13 @@ extern std::condition_variable fileHandlerCV;
 extern bool loadMoreFileEvents;
 bool returnLoadMoreFileEvents();
 
-#define maxQueuedFileEvents 1000000
+#define maxQueuedFileEvents 100000000
 
+#define SRV_UPSTART 1000
 
 extern std::atomic<bool> isRunning;
+
+static std::string EventNames[14] = {"ACCEPT","ACCEPTED", "CONNECT", "CONNECTED", "CLOSE", "RECV", "RECVD", "WAIT", "SEND", "SENT", "SRV_START", "SRV_STARTED", "SRV_END", "NONE"};
 
 enum EventType {
                 ACCEPT, 	/* We should expect to accept a connection from a client. */

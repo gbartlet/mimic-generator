@@ -45,6 +45,8 @@ class EventQueue {
         int cleanUp();
         void addEvent(std::shared_ptr<Event> e);
         bool getEvent(std::shared_ptr<Event>& job);
+	int getLength();
+	
         long int nextEventTime();
 };
 
@@ -62,6 +64,8 @@ class EventHeap {
         ~EventHeap();
         void addEvent(Event e);
         long int nextEventTime();
+	int getLength();
+	void print();
         std::unique_ptr<Event> nextEvent();
 };
 

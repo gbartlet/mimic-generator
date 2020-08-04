@@ -180,7 +180,7 @@ void connectionHandlerThread(int numConns, EventQueue* eq) {
             else if(events[i].events & EPOLLOUT) {
                 bool done = true;
                 int count = 5000;
-                //count = writeToSocket(events[i].data.fd, &done, count);
+                count = writeToSocket(events[i].data.fd, &done, count);
             }
         }
     }   
@@ -234,7 +234,7 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        /* Arg tells us what role we should play.
+        /* Arg tells us what role we should play. (
         else if((arg == "-C") || (arg == "-S")) {
             if(roleFlag) {
                 std::cerr << "Given both -C and -S: choose one roll Server (-S) or Client (-C)" << std::endl;
@@ -246,7 +246,7 @@ int main(int argc, char* argv[]) {
         
         /* We don't recognize this argument. */
         else {
-            std::cerr << "Usage: " << argv[0] << "-C|-S {-t NUM_THREADS} {-s SRV_IP} {-c NUM_CONNS}" << std::endl;
+	  std::cerr << "Usage: " << argv[0] << " -C|-S {-t NUM_THREADS} {-s SRV_IP} {-c NUM_CONNS} wrong arg " <<arg<<std::endl;
         }
     }
     
@@ -271,25 +271,24 @@ int main(int argc, char* argv[]) {
     EventQueue * sentQ = new EventQueue("Sent events");
     EventQueue * serverQ = new EventQueue("Sever start/stop events");
     EventQueue * sendQ = new EventQueue("Send events.");
-    
-    
+    std::unordered_map<long int, EventQueue*> c2eq;
     
     //std::string ipFile = "/users/gbartlet/mimic-generator/testFiles/b-ips.txt";
-    connFile = "/users/gbartlet/mimic-generator/testFiles/testconn.csv";
+    connFile = "testconn.csv";
     std::vector<std::string> eFiles;
-    eFiles.push_back("/users/gbartlet/mimic-generator/testFiles/events.csv");
+    eFiles.push_back("events.csv");
     
     
     
-    FileWorker* fw = new FileWorker(loadMoreNotifier, fileQ, ipFile, connFile, eFiles);
+    FileWorker* fw = new FileWorker(loadMoreNotifier, fileQ, acceptQ, &c2eq, ipFile, connFile, eFiles);
     isRunning.store(true);
     fw->startup();
     ConnectionPairMap * ConnIDtoConnectionPairMap = fw->getConnectionPairMap();
+
+    EventHandler* eh = new EventHandler(loadMoreNotifier, fileQ, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
+    eh->startup();	
     //ServerWorker* sw = new ServerWorker(serverQ, acceptQ);
     //sw->startup(ConnIDtoConnectionPairMap);
-
-    EventHandler* eh = new EventHandler(loadMoreNotifier, fileQ, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap);
-    eh->startup();	
     
     isRunning.store(true);    
     
@@ -304,12 +303,15 @@ int main(int argc, char* argv[]) {
     /* Event Handler. */
     std::thread eventHandlerThread(&EventHandler::loop, eh, startPoint);
     
-    usleep(1000000 * 10);
+    usleep(10000000 * 10);
     
     isRunning.store(false);
     fileWorkerThread.join();
     //serverWorkerThread.join();
     eventHandlerThread.join();
+    EventQueue* eq = new EventQueue();
+    std::thread connThread(connectionHandlerThread,numConns, sendQ);
+    connThread.join();
     exit(0);
 
 

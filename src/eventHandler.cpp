@@ -156,11 +156,39 @@ void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
         case RECV: {
 	  connectionUpdate(dispatchJob->conn_id, dispatchJob->ms_from_start, now);
 	  if (DEBUG)
-	    std::cout<<"RECV JOB waiting to recv "<<connToWaitingToRecv[dispatchJob->conn_id]<<" job value "<<dispatchJob->value<<std::endl;
+	    std::cout<<"RECV JOB waiting to recv "<<connToWaitingToRecv[dispatchJob->conn_id]<<" on conn "<<dispatchJob->conn_id<<" job value "<<dispatchJob->value<<std::endl;
 	   connToWaitingToRecv[dispatchJob->conn_id] = connToWaitingToRecv[dispatchJob->conn_id] + dispatchJob->value;
-	   if (DEBUG)
-	     std::cout<<"Will wait to RECV "<<connToWaitingToRecv[dispatchJob->conn_id]<<" for "<<dispatchJob->conn_id<<" on sock "<<dispatchJob->sockfd<<std::endl;
-	   myPollHandler->watchForRead(dispatchJob->sockfd);
+
+	   while(connToWaitingToRecv[dispatchJob->conn_id] > 0)
+	     {
+	       if (DEBUG)
+		 std::cout<<"Waiting for "<<connToWaitingToRecv[dispatchJob->conn_id]<<std::endl;
+	       int n = recv(dispatchJob->sockfd, buf, MAXLEN, 0);
+	       if (n > 0)
+		 {
+		   if (DEBUG)
+		     std::cout<<"RECVd 1 "<<n<<" bytes for conn "<<dispatchJob->conn_id<<std::endl;
+		   connToWaitingToRecv[dispatchJob->conn_id] -= n;
+		   if (connToWaitingToRecv[dispatchJob->conn_id] < 0) // weird case
+		     connToWaitingToRecv[dispatchJob->conn_id] = 0;
+		   if (DEBUG)
+		     std::cout<<"RECV waiting now for "<<connToWaitingToRecv[dispatchJob->conn_id]<<" conn "<<dispatchJob->conn_id<<std::endl;
+		  // Check if lower than 0 or 0 move new event ahead
+		   if (connToWaitingToRecv[dispatchJob->conn_id] <= 0)
+		    {
+		      connectionUpdate(dispatchJob->conn_id, 0, now);
+		      getNewEvents(dispatchJob->conn_id);
+		      break;
+		    }
+		 }
+	       else
+		 {
+		   if (DEBUG)
+		     std::cout<<"Will wait to RECV "<<connToWaitingToRecv[dispatchJob->conn_id]<<" for "<<dispatchJob->conn_id<<" on sock "<<dispatchJob->sockfd<<std::endl;
+		   myPollHandler->watchForRead(dispatchJob->sockfd);
+		   break;
+		 }
+	     }
             // From file events. We should dispatch this.
             break;
         }
@@ -212,14 +240,23 @@ void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
       if (DEBUG)
 	std::cout<<"Handling SEND event waiting to send "<<connToWaitingToSend[dispatchJob->conn_id]<<" on sock "<<dispatchJob->sockfd<<std::endl;
       // Try to send
-      int n = send(dispatchJob->sockfd, buf, connToWaitingToSend[dispatchJob->conn_id], 0);
-      if (n < 0)
-	myPollHandler->watchForWrite(dispatchJob->sockfd);
-      else
+      while (connToWaitingToSend[dispatchJob->conn_id] > 0)
 	{
-	  if (DEBUG)
-	    std::cout<<"Successfuly handled SEND event for "<<n<<" bytes\n";
+	  int n = send(dispatchJob->sockfd, buf, connToWaitingToSend[dispatchJob->conn_id], 0);
+	  if (n < 0)
+	    {
+	      myPollHandler->watchForWrite(dispatchJob->sockfd);
+	      break;
+	    }
+	  else
+	    {
+	      connToWaitingToSend[dispatchJob->conn_id] -= n;
+	      if (DEBUG)
+		std::cout<<"Successfuly handled SEND event for "<<n<<" bytes\n";
+	    }
 	}
+      if (connToWaitingToSend[dispatchJob->conn_id] < 0)
+	connToWaitingToSend[dispatchJob->conn_id] = 0; // weird case
       break;
     }
         /* We handle these. */
@@ -382,11 +419,11 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
         //usleep(1000 * 1000);
         
         /* If the last time we checked the time in the events queue it was empty, redo our check now. */
-	if (sends == 1000 && end == 0)
+	if (sends == 2000 && end == 0)
 	  {
 	    end = msSinceStart(startTime);
 	    std::cout<<"Ending time "<<end<<" sends "<<sends<<std::endl;
-	    }
+	  }
 	// Check epoll events.
         int timeout = 0;
         if(nextEventTime - now > 0)
@@ -460,16 +497,18 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	    }
 	  if (connState[conn_id] == EST && ((poll_e->events & EPOLLIN) > 0))
 	    {
-	      	if (DEBUG)
-	      std::cout<<"Possibly handling a RECV event for "<<conn_id<<" on sock "<<fd<<std::endl;
+	      if (DEBUG)
+		std::cout<<"Possibly handling a RECV event for "<<conn_id<<" on sock "<<fd<<std::endl;
 	      int n = recv(fd, buf, MAXLEN, 0);
-	      	if (DEBUG)
-	      std::cout<<"RECVd "<<n<<" bytes for conn "<<conn_id<<std::endl;
+	      if (DEBUG)
+		std::cout<<"RECVd 2 "<<n<<" bytes for conn "<<conn_id<<std::endl;
 	      if (n > 0)
 		{
 		  connToWaitingToRecv[conn_id] -= n;
-		  	if (DEBUG)
-		  std::cout<<"RECV waiting now for "<<connToWaitingToRecv[conn_id]<<std::endl;
+		  if (connToWaitingToRecv[conn_id] < 0) // weird case
+		     connToWaitingToRecv[conn_id] = 0;
+		  if (DEBUG)
+		    std::cout<<"RECV waiting now for "<<connToWaitingToRecv[conn_id]<<" on conn "<<conn_id<<std::endl;
 		  // Check if lower than 0 or 0 move new event ahead
 		  if (connToWaitingToRecv[conn_id] <= 0)
 		    {

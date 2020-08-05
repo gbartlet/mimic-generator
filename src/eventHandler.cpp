@@ -382,12 +382,12 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
         //usleep(1000 * 1000);
         
         /* If the last time we checked the time in the events queue it was empty, redo our check now. */
-	if (nextHeapEventTime < 0)
+	if (sends == 1000 && end == 0)
 	  {
 	    end = msSinceStart(startTime);
-	    //std::cout<<"Ending time "<<end<<" sends "<<sends<<std::endl;
-	  }
-        // Check epoll events.
+	    std::cout<<"Ending time "<<end<<" sends "<<sends<<std::endl;
+	    }
+	// Check epoll events.
         int timeout = 0;
         if(nextEventTime - now > 0)
             timeout = nextEventTime - now;

@@ -239,6 +239,7 @@ void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
       connToWaitingToSend[dispatchJob->conn_id] += dispatchJob->value;
       if (DEBUG)
 	std::cout<<"Handling SEND event waiting to send "<<connToWaitingToSend[dispatchJob->conn_id]<<" on sock "<<dispatchJob->sockfd<<std::endl;
+
       // Try to send
       while (connToWaitingToSend[dispatchJob->conn_id] > 0)
 	{
@@ -388,7 +389,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  if(true){ // this was if (bool = got a job)
                 std::shared_ptr<Event> dispatchJob(job);
 		if (DEBUG)
-                std::cout << "Heap Event handler GOT JOB " << EventNames[dispatchJob->type] <<" conn "<<dispatchJob->conn_id<<" event "<<dispatchJob->event_id<<" ms from start "<<dispatchJob->ms_from_start<<" value "<<dispatchJob->value<<std::endl;
+		  std::cout << "Heap Event handler GOT JOB " << EventNames[dispatchJob->type] <<" conn "<<dispatchJob->conn_id<<" event "<<dispatchJob->event_id<<" ms from start "<<dispatchJob->ms_from_start<<" value "<<dispatchJob->value<<std::endl;
 		if (dispatchJob->type == SEND)
 		  {
 		    sends++;
@@ -428,7 +429,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
         int timeout = 0;
         if(nextEventTime - now > 0)
             timeout = nextEventTime - now;
-	
+
         myPollHandler->waitForEvents(timeout);
         
         /* Handle any events from poll. Could be 			*/

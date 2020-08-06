@@ -196,12 +196,13 @@ int main(int argc, char* argv[]) {
     
     std::string ipFile = "";
     std::string connFile = "";
+    std::string eventFile = "";
     
     for(int i=1; i<argc; ++i) {
-        std::string arg = argv[i];
+      std::string arg = argv[i];
         
         /* We have an option. */
-        if((arg == "-i") || (arg == "-c")) {
+      if((arg.starts_with("-"))) {
             if(i+1 < argc) {
                 if((arg == "-t")) {
                     try {
@@ -227,6 +228,10 @@ int main(int argc, char* argv[]) {
                     connFile = argv[i+1];
                     i++;
                 }
+		else if(arg == "-e") {
+                    eventFile = argv[i+1];
+                    i++;
+                }
             }
             else {
                 std::cerr << arg << " requires argument." << std::endl;
@@ -246,7 +251,7 @@ int main(int argc, char* argv[]) {
         
         /* We don't recognize this argument. */
         else {
-	  std::cerr << "Usage: " << argv[0] << " -C|-S {-t NUM_THREADS} {-s SRV_IP} {-c NUM_CONNS} wrong arg " <<arg<<std::endl;
+	  std::cerr << "Usage: " << argv[0] << " {-i IPFile} {-c connFile} {-e eventFile}  wrong arg " <<arg<<std::endl;
         }
     }
     
@@ -272,11 +277,12 @@ int main(int argc, char* argv[]) {
     EventQueue * serverQ = new EventQueue("Sever start/stop events");
     EventQueue * sendQ = new EventQueue("Send events.");
     std::unordered_map<long int, EventQueue*> c2eq;
-    
+
+    std::cout<<"Conn file "<<connFile<<" event file "<<eventFile<<std::endl;
     //std::string ipFile = "/users/gbartlet/mimic-generator/testFiles/b-ips.txt";
-    connFile = "testconn.csv";
+    //connFile = "testconn.csv";
     std::vector<std::string> eFiles;
-    eFiles.push_back("events.csv");
+    eFiles.push_back(eventFile);
     
     
     

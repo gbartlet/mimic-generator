@@ -138,7 +138,7 @@ std::vector <std::vector <std::string>> FileWorker::loadMMapFile(void * mmapData
             data.push_back(record);
         }
         else {
-            std::cerr << "ERROR: Not enough fields in line to process: " << bufPart << std::endl;
+	  std::cerr << "ERROR: Not enough fields in line to process: " <<record.size()  << std::endl;
         }
         i = i + 1;
         if(i >= numRecords && !noLimit) break;
@@ -202,38 +202,95 @@ void FileWorker::loadEvents() {
       loopedCount = loopedCount + 1;
       
       for(std::vector<int>::size_type i = 0; i != eventData.size(); i++) {
-	//std::cout<<"Check conn id "<<eventData[i][1].c_str()<<std::endl;
-	if(isMyConnID(std::stol(eventData[i][1].c_str()))) {
-	  //std::cout<<"My conn\n";
-	  Event e;
-	  e.conn_id = std::stol(eventData[i][1].c_str());
-	  e.event_id = std::stol(eventData[i][2].c_str());      
-	  e.value = std::stoi(eventData[i][5].c_str()); 
-	  e.ms_from_last_event = (long int)(std::stod(eventData[i][6].c_str()) * 1000);
-	  e.ms_from_start = (long int)(std::stod(eventData[i][7].c_str()) * 1000) + loopedCount * loopDuration;
-
-	  /* Type of event - send and recieve. */
-	  if (DEBUG)
-	    std::cout<<"Check ip "<<eventData[i][3]<<" type "<<eventData[i][3]<<std::endl;
-	  if(isMyIP(eventData[i][3])) {
-	    //std::cout<<"My ip\n";
-	    if(eventData[i][4].compare("SEND")==0) e.type = SEND;
-	    else e.type = RECV;
-	    //std::cout<<"Data type "<<e.type<<std::endl;
-	    //else {
-	    //    if(eventData[i][3].compare("SEND")==0) e.type = RECV;
-	    //    else e.type = WAIT;
-	    //}
-	    //std::cout << "Have event with time of " << e.ms_from_start << std::endl;
-
+	// Check if this is CONN record or event record
+	if (eventData[i][0] == "CONN")
+	  {
+	    long int connID;
+	    try {
+	      connID = std::stol(eventData[i][2].c_str());
+	    }
+	    catch(...){
+	      perror("Problem with connData line, continuing.");
+	      continue;
+	    }
+	    std::string src = trim(eventData[i][3]);
+	    int sport = std::stoi(eventData[i][4].c_str());
+	    std::string dst = trim(eventData[i][6]);
+	    int dport = std::stoi(eventData[i][7].c_str());
 	    if (DEBUG)
-	      std::cout<<"Event for conn "<<e.conn_id<<" event id "<<e.event_id<<" type "<<EventNames[e.type]<<" value "<<e.value<<std::endl;
-	    (*ConnectionEQ)[e.conn_id]->addEvent(e);
-	    //shortTermHeap->addEvent(e);
-	    eventsProduced = eventsProduced + 1;
+	      std::cout << "Check if IP '" << src << "' and '" << dst << "' are in my connections." << std::endl;
+	    if(isMyIP(src) || isMyIP(dst)) {
+	      /* Add this connid to our ids.*/
+	      if (DEBUG)
+		std::cout << "Adding " << connID << " to my connection ids." << std::endl;
+	      myConnIDs.insert(connID);
+	      
+	      /* Fill out connIDToConnectionPairMap */
+	      connectionPair cp = connectionPair(src, sport, dst, dport);
+	      connIDToConnectionPairMap[connID] = std::make_shared<connectionPair>(cp);
+	      
+	      /* Add an event to start this connection. */
+	      Event e;
+	      e.conn_id = connID;
+	      e.event_id = -1;
+	      e.value = -1;
+	      e.ms_from_start = 0;
+	      e.ms_from_last_event = 0;
+	      if(isMyIP(src)) {
+                e.ms_from_start = stod(eventData[i][1])*1000;
+                e.type = CONNECT;
+		if (DEBUG)
+		  std::cout<<"Adding connect event for conn "<<e.conn_id<<"\n";
+		(*ConnectionEQ)[e.conn_id] = new EventHeap();
+	      }
+	      else {
+                /* XXX Have we started a server for this IP:port yet? If not, add event. */
+		e.ms_from_start = std::max((long int)(std::stod(eventData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
+		e.type = SRV_START;
+		if (DEBUG)
+		  std::cout<<"Adding server event for conn "<<e.conn_id<<"\n";
+		(*ConnectionEQ)[e.conn_id] = new EventHeap();
+	      }
+	      shortTermHeap->addEvent(e);
+	    }
+	    src.clear();
+	    dst.clear();
 	  }
-	  lastEventTime = std::stod(eventData[i][7].c_str()) * 1000 + loopedCount * loopDuration;
-	}
+	else if(eventData[i][0] == "EVENT")
+	  {
+	    //std::cout<<"Check conn id "<<eventData[i][1].c_str()<<std::endl;
+	    if(isMyConnID(std::stol(eventData[i][1].c_str()))) {
+	      //std::cout<<"My conn\n";
+	      Event e;
+	      e.conn_id = std::stol(eventData[i][1].c_str());
+	      e.event_id = std::stol(eventData[i][2].c_str());      
+	      e.value = std::stoi(eventData[i][5].c_str()); 
+	      e.ms_from_last_event = (long int)(std::stod(eventData[i][6].c_str()) * 1000);
+	      e.ms_from_start = (long int)(std::stod(eventData[i][7].c_str()) * 1000) + loopedCount * loopDuration;
+	      
+	      /* Type of event - send and recieve. */
+	      if (DEBUG)
+		std::cout<<"Check ip "<<eventData[i][3]<<" type "<<eventData[i][3]<<std::endl;
+	      if(isMyIP(eventData[i][3])) {
+		//std::cout<<"My ip\n";
+		if(eventData[i][4].compare("SEND")==0) e.type = SEND;
+		else e.type = RECV;
+		//std::cout<<"Data type "<<e.type<<std::endl;
+		//else {
+		//    if(eventData[i][3].compare("SEND")==0) e.type = RECV;
+		//    else e.type = WAIT;
+		//}
+		//std::cout << "Have event with time of " << e.ms_from_start << std::endl;
+		
+		if (DEBUG)
+		  std::cout<<"Event for conn "<<e.conn_id<<" event id "<<e.event_id<<" type "<<EventNames[e.type]<<" value "<<e.value<<std::endl;
+		(*ConnectionEQ)[e.conn_id]->addEvent(e);
+		//shortTermHeap->addEvent(e);
+		eventsProduced = eventsProduced + 1;
+	      }
+	      lastEventTime = std::stod(eventData[i][7].c_str()) * 1000 + loopedCount * loopDuration;
+	    }
+	  }
       }
     }
     if (DEBUG)
@@ -264,7 +321,7 @@ bool FileWorker::startup() {
     }    
     infile.close();
     
-    /* Load our connections. */
+    /* Load our connections. 
     myConnIDs = {};
     connIDToConnectionPairMap = {};
     try {
@@ -292,16 +349,16 @@ bool FileWorker::startup() {
 	if (DEBUG)
 	  std::cout << "Check if IP '" << src << "' and '" << dst << "' are in my connections." << std::endl;
         if(isMyIP(src) || isMyIP(dst)) {
-            /* Add this connid to our ids.*/
+            // Add this connid to our ids.
 	    if (DEBUG)
 	      std::cout << "Adding " << connID << " to my connection ids." << std::endl;
             myConnIDs.insert(connID);
             
-            /* Fill out connIDToConnectionPairMap */
+            // Fill out connIDToConnectionPairMap 
             connectionPair cp = connectionPair(src, sport, dst, dport);
             connIDToConnectionPairMap[connID] = std::make_shared<connectionPair>(cp);
             
-            /* Add an event to start this connection. */
+            // Add an event to start this connection. 
             Event e;
             e.conn_id = connID;
             e.event_id = -1;
@@ -316,7 +373,7 @@ bool FileWorker::startup() {
 		(*ConnectionEQ)[e.conn_id] = new EventHeap();
             }
             else {
-                /* XXX Have we started a server for this IP:port yet? If not, add event. */
+          
 	      e.ms_from_start = std::max((long int)(std::stod(connData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
 	      e.type = SRV_START;
 	      if (DEBUG)
@@ -330,6 +387,7 @@ bool FileWorker::startup() {
     }
     infile.close();
 
+    */
     /* Set ourselves up for the first event file.*/
     /* XXX Should check if our event files are time ordered. */
     loadEvents();

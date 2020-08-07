@@ -312,8 +312,8 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
   
   while(isRunning.load()) {
     long int nextEventTime = incomingFileEvents->nextEventTime();    
-    std::cout<<"Next event time "<<nextEventTime<<" now "<<now<<std::endl;
-    std::cout <<"EH: Beginning of loop time " <<now<<std::endl;
+    //std::cout<<"Next event time "<<nextEventTime<<" now "<<now<<std::endl;
+    //std::cout <<"EH: Beginning of loop time " <<now<<std::endl;
     while(nextEventTime <= now && nextEventTime >= 0) {
       std::shared_ptr<Event> job;
       //std::cout << "EH: Event handler TRYING TO GET JOB" << std::endl;

@@ -284,25 +284,25 @@ int main(int argc, char* argv[]) {
     std::cout<<"Conn file "<<connFile<<" event file "<<eventFile<<std::endl;
     //std::string ipFile = "/users/gbartlet/mimic-generator/testFiles/b-ips.txt";
     //connFile = "testconn.csv";
-    std::string connFile2 = "testconn2.csv";
+    //std::string connFile2 = "testconn2.csv";
     std::vector<std::string> eFiles, eFiles2;
-    eventFile = "events1.csv";
+    eventFile = "evconn.csv";
     eFiles.push_back(eventFile);
-    eventFile = "events2.csv";
-    eFiles2.push_back(eventFile);
+    //eventFile = "events2.csv";
+    //eFiles2.push_back(eventFile);
     
     
     FileWorker* fw = new FileWorker(loadMoreNotifier, fileQ, acceptQ, &c2eq, ipFile, connFile, eFiles);
     fw->startup();
     ConnectionPairMap * ConnIDtoConnectionPairMap = fw->getConnectionPairMap();
-    FileWorker* fw2 = new FileWorker(loadMoreNotifier, fileQ2, acceptQ, &c2eq2, ipFile, connFile2, eFiles2);
-    fw2->startup();
-    ConnectionPairMap * ConnIDtoConnectionPairMap2 = fw2->getConnectionPairMap();
+    //FileWorker* fw2 = new FileWorker(loadMoreNotifier, fileQ2, acceptQ, &c2eq2, ipFile, connFile2, eFiles2);
+    //fw2->startup();
+    //ConnectionPairMap * ConnIDtoConnectionPairMap2 = fw2->getConnectionPairMap();
 
     EventHandler* eh = new EventHandler(loadMoreNotifier, fileQ, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
     eh->startup();
-    EventHandler* eh2 = new EventHandler(loadMoreNotifier, fileQ2, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap2, &c2eq2);
-    eh2->startup();
+    //EventHandler* eh2 = new EventHandler(loadMoreNotifier, fileQ2, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap2, &c2eq2);
+    //eh2->startup();
     
     //ServerWorker* sw = new ServerWorker(serverQ, acceptQ);
     //sw->startup(ConnIDtoConnectionPairMap);
@@ -313,23 +313,23 @@ int main(int argc, char* argv[]) {
     std::chrono::high_resolution_clock::time_point startPoint = std::chrono::high_resolution_clock::now();
     /* File worker. */
     std::thread fileWorkerThread(&FileWorker::loop, fw, startPoint);
-    std::thread fileWorkerThread2(&FileWorker::loop, fw2, startPoint);
+    //std::thread fileWorkerThread2(&FileWorker::loop, fw2, startPoint);
     
     /* Server Woker. */
     //std::thread serverWorkerThread(&ServerWorker::loop, sw, startPoint);                     
         
     /* Event Handler. */
     std::thread eventHandlerThread(&EventHandler::loop, eh, startPoint);
-    std::thread eventHandlerThread2(&EventHandler::loop, eh2, startPoint);
+    //std::thread eventHandlerThread2(&EventHandler::loop, eh2, startPoint);
     
     usleep(10000000 * 10);
     
     isRunning.store(false);
     fileWorkerThread.join();
-    fileWorkerThread2.join();
+    //fileWorkerThread2.join();
     //serverWorkerThread.join();
     eventHandlerThread.join();
-    eventHandlerThread2.join();
+    //eventHandlerThread2.join();
     EventQueue* eq = new EventQueue();
     std::thread connThread(connectionHandlerThread,numConns, sendQ);
     connThread.join();

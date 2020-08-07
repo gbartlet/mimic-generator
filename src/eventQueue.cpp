@@ -15,7 +15,10 @@
 #define MAX_BACKLOG_PER_SRV 5
 
 int compareEvents::operator()(const Event& e1, const Event& e2) {
+  if (e1.ms_from_start != e2.ms_from_start)
     return e1.ms_from_start > e2.ms_from_start;
+  else
+    return e1.event_id > e2.event_id;
 }
 
 
@@ -126,15 +129,10 @@ long int EventHeap::nextEventTime() {
     return t;
 }
 
-std::unique_ptr<Event> EventHeap::nextEvent() {
-    std::unique_ptr<Event> e_shr (nullptr);
-    if(eventHeap.empty() == true) {
-        //std::cout << "Heap empty.\n";
-        return e_shr;
-    }
-    e_shr = std::make_unique<Event>(eventHeap.top());
+Event EventHeap::nextEvent() {
+    Event e = eventHeap.top();
     eventHeap.pop();
-    return e_shr;
+    return e;
 }
 
 int EventHeap::getLength() {

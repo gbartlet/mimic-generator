@@ -4,7 +4,7 @@
 #include "mimic.h"
 
 
-FileWorker::FileWorker(EventNotifier* loadMoreNotifier, EventQueue* out, EventQueue* accept, std::unordered_map<long int, EventQueue*>* c2eq, std::string& ipFile, std::string& connFile, std::vector<std::string>& eFiles, bool useMMapFlag) {
+FileWorker::FileWorker(EventNotifier* loadMoreNotifier, EventQueue* out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::string& connFile, std::vector<std::string>& eFiles, bool useMMapFlag) {
   
     fileEventsAddedCount = 0;
     useMMap = useMMapFlag;
@@ -228,8 +228,7 @@ void FileWorker::loadEvents() {
 
 	    if (DEBUG)
 	      std::cout<<"Event for conn "<<e.conn_id<<" event id "<<e.event_id<<" type "<<EventNames[e.type]<<" value "<<e.value<<std::endl;
-	    std::shared_ptr<Event> e_shr = std::make_shared<Event>(e);
-	    (*ConnectionEQ)[e.conn_id]->addEvent(e_shr);
+	    (*ConnectionEQ)[e.conn_id]->addEvent(e);
 	    //shortTermHeap->addEvent(e);
 	    eventsProduced = eventsProduced + 1;
 	  }
@@ -314,7 +313,7 @@ bool FileWorker::startup() {
                 e.type = CONNECT;
 		  if (DEBUG)
 		    std::cout<<"Adding connect event for conn "<<e.conn_id<<"\n";
-		(*ConnectionEQ)[e.conn_id] = new EventQueue();
+		(*ConnectionEQ)[e.conn_id] = new EventHeap();
             }
             else {
                 /* XXX Have we started a server for this IP:port yet? If not, add event. */
@@ -322,7 +321,7 @@ bool FileWorker::startup() {
 	      e.type = SRV_START;
 	      if (DEBUG)
 		std::cout<<"Adding server event for conn "<<e.conn_id<<"\n";
-	      (*ConnectionEQ)[e.conn_id] = new EventQueue();
+	      (*ConnectionEQ)[e.conn_id] = new EventHeap();
             }
 	    shortTermHeap->addEvent(e);                                                     
         }
@@ -347,26 +346,20 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	if (DEBUG)
 	  std::cout << "Pulling from our heap, next event time in heap is: " << nextET << " Last event time: " << lastEventTime << std::endl;
         while(nextET <= lastEventTime && nextET > -1) {
-            std::unique_ptr<Event> e_ptr = shortTermHeap->nextEvent();
-	    if (DEBUG)
-	      std::cout << "Have event to add of type " << EventNames[e_ptr->type] <<" time "<<nextET<<std::endl;
-            if(e_ptr != NULL) {
-	      if (DEBUG)
-                std::cout << "Adding event with time: " << shortTermHeap->nextEventTime() << " time of last event added " << lastEventTime <<  std::endl;
-                std::shared_ptr<Event> e_shr = std::make_shared<Event>(*(e_ptr.get()));
-		outEvents->addEvent(e_shr);
-                e_shr.reset();
-                fileEventsAddedCount++;
-                if(fileEventsAddedCount > maxQueuedFileEvents) {
-                    fileEventsAddedCount = 0;
-                    break;
-                }
-            }
-            else {
-                break;
-            }
-            e_ptr.reset();
-            nextET = shortTermHeap->nextEventTime();
+	  Event e = shortTermHeap->nextEvent();
+	  if (DEBUG)
+	    std::cout << "Have event to add of type " << EventNames[e.type] <<" time "<<nextET<<std::endl;
+	  if (DEBUG)
+	    std::cout << "Adding event with time: " << shortTermHeap->nextEventTime() << " time of last event added " << lastEventTime <<  std::endl;
+	  std::shared_ptr<Event> e_shr = std::make_shared<Event>(e);
+	  outEvents->addEvent(e_shr);
+	  e_shr.reset();
+	  fileEventsAddedCount++;
+	  if(fileEventsAddedCount > maxQueuedFileEvents) {
+	    fileEventsAddedCount = 0;
+	    break;
+	  }
+	  nextET = shortTermHeap->nextEventTime();
         }
         
         /* Maybe we should give it a rest for a bit. */

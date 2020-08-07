@@ -34,39 +34,11 @@ void EventHandler::processAcceptEvents(long int now) {
       std::shared_ptr<Event> job;
       //std::cout << "EH:pae: Event handler TRYING TO GET JOB" << std::endl;
       while((*incomingAcceptedEvents).getEvent(job)){
-	std::shared_ptr<Event> dispatchJob(job);
+	Event dispatchJob = *job;
 	if (DEBUG)
-	  std::cout << "pae: Event handler GOT JOB " << EventNames[dispatchJob->type] <<" conn "<<dispatchJob->conn_id<<" event "<<dispatchJob->event_id<<std::endl;
+	  std::cout << "pae: Event handler GOT JOB " << EventNames[dispatchJob.type] <<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<std::endl;
 	dispatch(dispatchJob, now);
       }
-}
-void EventHandler::processSentEvents() {
-  /*
-  for(std::unordered_map<long int, int>::iterator it = connToWaitingToSend.begin(); it != connToWaitingToSend.end(); it++)
-    {
-      // Make sure we re-watch for writes
-      myPollHandler->watchForWrite(connToSockfdIDMap[it->first]);
-    }
-  */
-}
-void EventHandler::processRECVedEvents() {
-}
-void EventHandler::popWaitEvents() {
-}
-void EventHandler::processFileEvents() {
-}
-void EventHandler::addWait() {
-}
-
-void EventHandler::checkDeferred(int long now) {
-    std::unique_ptr<Event> e_ptr = waitHeap.nextEvent();
-    while(e_ptr != nullptr) {
-        std::shared_ptr<Event> e_shr = std::move(e_ptr);
-        dispatch(e_shr, now);
-        e_shr.reset();
-        e_ptr.reset();
-        e_ptr = waitHeap.nextEvent();
-    }
 }
 
 bool EventHandler::readyForEvent(long int connID, long int delta, long int now) {
@@ -131,7 +103,7 @@ void EventHandler::connectionUpdate(long int connID, long int planned, long int 
 
 #define MAXLEN 1000000
 
-void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
+void EventHandler::dispatch(Event dispatchJob, long int now) {
     /* 	EventQueue* incomingFileEvents;
         --> OLD: EventQueue* incomingAcceptedEvents;
         EventQueue* incomingRECVedEvents;
@@ -140,52 +112,52 @@ void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
   char buf[MAXLEN];
   
   if (DEBUG)
-    std::cout<<"EH: dispatch job type "<<EventNames[dispatchJob->type]<<std::endl;
-    switch(dispatchJob->type) {
+    std::cout<<"EH: dispatch job type "<<EventNames[dispatchJob.type]<<std::endl;
+    switch(dispatchJob.type) {
         /* We note these as events in our connection structure. */
         case ACCEPT: {
-	  newConnectionUpdate(dispatchJob->sockfd, dispatchJob->conn_id, dispatchJob->ms_from_start, now);
-	  myPollHandler->watchForWrite(connToSockfdIDMap[dispatchJob->conn_id]);
+	  newConnectionUpdate(dispatchJob.sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start, now);
+	  myPollHandler->watchForWrite(connToSockfdIDMap[dispatchJob.conn_id]);
 	  if (DEBUG)
-	    std::cout<<"PH will watch for write on "<<connToSockfdIDMap[dispatchJob->conn_id]<<" for conn "<<dispatchJob->conn_id<<std::endl;
+	    std::cout<<"PH will watch for write on "<<connToSockfdIDMap[dispatchJob.conn_id]<<" for conn "<<dispatchJob.conn_id<<std::endl;
 	  break;
         }
         case WAIT: {
             break;
         }
         case RECV: {
-	  connectionUpdate(dispatchJob->conn_id, dispatchJob->ms_from_start, now);
+	  connectionUpdate(dispatchJob.conn_id, dispatchJob.ms_from_start, now);
 	  if (DEBUG)
-	    std::cout<<"RECV JOB waiting to recv "<<connToWaitingToRecv[dispatchJob->conn_id]<<" on conn "<<dispatchJob->conn_id<<" job value "<<dispatchJob->value<<std::endl;
-	   connToWaitingToRecv[dispatchJob->conn_id] = connToWaitingToRecv[dispatchJob->conn_id] + dispatchJob->value;
+	    std::cout<<"RECV JOB waiting to recv "<<connToWaitingToRecv[dispatchJob.conn_id]<<" on conn "<<dispatchJob.conn_id<<" job value "<<dispatchJob.value<<std::endl;
+	   connToWaitingToRecv[dispatchJob.conn_id] = connToWaitingToRecv[dispatchJob.conn_id] + dispatchJob.value;
 
-	   while(connToWaitingToRecv[dispatchJob->conn_id] > 0)
+	   while(connToWaitingToRecv[dispatchJob.conn_id] > 0)
 	     {
 	       if (DEBUG)
-		 std::cout<<"Waiting for "<<connToWaitingToRecv[dispatchJob->conn_id]<<std::endl;
-	       int n = recv(dispatchJob->sockfd, buf, MAXLEN, 0);
+		 std::cout<<"Waiting for "<<connToWaitingToRecv[dispatchJob.conn_id]<<std::endl;
+	       int n = recv(dispatchJob.sockfd, buf, MAXLEN, 0);
 	       if (n > 0)
 		 {
 		   if (DEBUG)
-		     std::cout<<"RECVd 1 "<<n<<" bytes for conn "<<dispatchJob->conn_id<<std::endl;
-		   connToWaitingToRecv[dispatchJob->conn_id] -= n;
-		   if (connToWaitingToRecv[dispatchJob->conn_id] < 0) // weird case
-		     connToWaitingToRecv[dispatchJob->conn_id] = 0;
+		     std::cout<<"RECVd 1 "<<n<<" bytes for conn "<<dispatchJob.conn_id<<std::endl;
+		   connToWaitingToRecv[dispatchJob.conn_id] -= n;
+		   if (connToWaitingToRecv[dispatchJob.conn_id] < 0) // weird case
+		     connToWaitingToRecv[dispatchJob.conn_id] = 0;
 		   if (DEBUG)
-		     std::cout<<"RECV waiting now for "<<connToWaitingToRecv[dispatchJob->conn_id]<<" conn "<<dispatchJob->conn_id<<std::endl;
+		     std::cout<<"RECV waiting now for "<<connToWaitingToRecv[dispatchJob.conn_id]<<" conn "<<dispatchJob.conn_id<<std::endl;
 		  // Check if lower than 0 or 0 move new event ahead
-		   if (connToWaitingToRecv[dispatchJob->conn_id] <= 0)
+		   if (connToWaitingToRecv[dispatchJob.conn_id] <= 0)
 		    {
-		      connectionUpdate(dispatchJob->conn_id, 0, now);
-		      getNewEvents(dispatchJob->conn_id);
+		      connectionUpdate(dispatchJob.conn_id, 0, now);
+		      getNewEvents(dispatchJob.conn_id);
 		      break;
 		    }
 		 }
 	       else
 		 {
 		   if (DEBUG)
-		     std::cout<<"Will wait to RECV "<<connToWaitingToRecv[dispatchJob->conn_id]<<" for "<<dispatchJob->conn_id<<" on sock "<<dispatchJob->sockfd<<std::endl;
-		   myPollHandler->watchForRead(dispatchJob->sockfd);
+		     std::cout<<"Will wait to RECV "<<connToWaitingToRecv[dispatchJob.conn_id]<<" for "<<dispatchJob.conn_id<<" on sock "<<dispatchJob.sockfd<<std::endl;
+		   myPollHandler->watchForRead(dispatchJob.sockfd);
 		   break;
 		 }
 	     }
@@ -195,13 +167,13 @@ void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
         /* We handle the connection and update our socket<->connid maps. */
         case CONNECT: {
             /* Get our address. */
-	  connToLastPlannedEvent[dispatchJob->conn_id] = dispatchJob->ms_from_start;
-            auto it = connIDToConnectionMap->find(dispatchJob->conn_id);
+	  connToLastPlannedEvent[dispatchJob.conn_id] = dispatchJob.ms_from_start;
+            auto it = connIDToConnectionMap->find(dispatchJob.conn_id);
             if(it != connIDToConnectionMap->end()) {
-	        connState[dispatchJob->conn_id] = CONNECTING;
+	        connState[dispatchJob.conn_id] = CONNECTING;
 	        int sockfd = getIPv4TCPSock((const struct sockaddr_in *)&(it->second->src));
 		if (DEBUG)
-		  std::cout<<"Connecting on sock "<<sockfd<<" for conn "<<dispatchJob->conn_id<<" state "<<connState[dispatchJob->conn_id]<<std::endl;
+		  std::cout<<"Connecting on sock "<<sockfd<<" for conn "<<dispatchJob.conn_id<<" state "<<connState[dispatchJob.conn_id]<<std::endl;
                 if(connect(sockfd, (struct sockaddr *)&(it->second->dst), sizeof(struct sockaddr_in)) == -1) {
 		  if (DEBUG)
 		    std::cout<<"Didn't connect right away\n";
@@ -214,20 +186,20 @@ void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
 		  else
 		    {
 		      myPollHandler->watchForWrite(sockfd);
-		      newConnectionUpdate(sockfd, dispatchJob->conn_id, dispatchJob->ms_from_start, now);
+		      newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start, now);
 		    }
 		}
 		else
 		  {
-		    connState[dispatchJob->conn_id] = EST;
-		    newConnectionUpdate(sockfd, dispatchJob->conn_id, dispatchJob->ms_from_start, now);
+		    connState[dispatchJob.conn_id] = EST;
+		    newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start, now);
 		    if (DEBUG)
-		      std::cout<<"Connected successfully 1 for conn "<<dispatchJob->conn_id<<" state is now "<<connState[dispatchJob->conn_id]<<std::endl;
-		    getNewEvents(dispatchJob->conn_id);
+		      std::cout<<"Connected successfully 1 for conn "<<dispatchJob.conn_id<<" state is now "<<connState[dispatchJob.conn_id]<<std::endl;
+		    getNewEvents(dispatchJob.conn_id);
 		  }
             }
             else {
-                std::cerr << "Could not find connection info for connID " << dispatchJob->conn_id << std::endl;
+                std::cerr << "Could not find connection info for connID " << dispatchJob.conn_id << std::endl;
                 return;
             }
             break;
@@ -235,41 +207,41 @@ void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
             
         /* Send thread handles these. */
     case SEND: {
-      connectionUpdate(dispatchJob->conn_id, dispatchJob->ms_from_start, now);
-      connToWaitingToSend[dispatchJob->conn_id] += dispatchJob->value;
+      connectionUpdate(dispatchJob.conn_id, dispatchJob.ms_from_start, now);
+      connToWaitingToSend[dispatchJob.conn_id] += dispatchJob.value;
       if (DEBUG)
-	std::cout<<"Handling SEND event waiting to send "<<connToWaitingToSend[dispatchJob->conn_id]<<" on sock "<<dispatchJob->sockfd<<std::endl;
+	std::cout<<"Handling SEND event waiting to send "<<connToWaitingToSend[dispatchJob.conn_id]<<" on sock "<<dispatchJob.sockfd<<std::endl;
 
       // Try to send
-      while (connToWaitingToSend[dispatchJob->conn_id] > 0)
+      while (connToWaitingToSend[dispatchJob.conn_id] > 0)
 	{
-	  int n = send(dispatchJob->sockfd, buf, connToWaitingToSend[dispatchJob->conn_id], 0);
+	  int n = send(dispatchJob.sockfd, buf, connToWaitingToSend[dispatchJob.conn_id], 0);
 	  if (n < 0)
 	    {
-	      myPollHandler->watchForWrite(dispatchJob->sockfd);
+	      myPollHandler->watchForWrite(dispatchJob.sockfd);
 	      break;
 	    }
 	  else
 	    {
-	      connToWaitingToSend[dispatchJob->conn_id] -= n;
+	      connToWaitingToSend[dispatchJob.conn_id] -= n;
 	      if (DEBUG)
 		std::cout<<"Successfuly handled SEND event for "<<n<<" bytes\n";
 	    }
 	}
-      if (connToWaitingToSend[dispatchJob->conn_id] < 0)
-	connToWaitingToSend[dispatchJob->conn_id] = 0; // weird case
+      if (connToWaitingToSend[dispatchJob.conn_id] < 0)
+	connToWaitingToSend[dispatchJob.conn_id] = 0; // weird case
       break;
     }
         /* We handle these. */
         case SRV_START: {
 	  
-	  connToLastPlannedEvent[dispatchJob->conn_id] = dispatchJob->ms_from_start;
+	  connToLastPlannedEvent[dispatchJob.conn_id] = dispatchJob.ms_from_start;
 	  // Create event and put into server queue
-	  connState[dispatchJob->conn_id] = LISTENING;
+	  connState[dispatchJob.conn_id] = LISTENING;
 	  //serverStartnStopReq->addEvent(dispatchJob);
-	  auto it = connIDToConnectionMap->find(dispatchJob->conn_id);
+	  auto it = connIDToConnectionMap->find(dispatchJob.conn_id);
 	  if(it == connIDToConnectionMap->end()) {
-	     std::cerr << "Asked to start server for connection ID " << dispatchJob->conn_id << " but this does not map to a known connection." << std::endl;
+	     std::cerr << "Asked to start server for connection ID " << dispatchJob.conn_id << " but this does not map to a known connection." << std::endl;
 	     break;
 	   }
 	   std::string servString = getIPPortString((const struct sockaddr_in*)&(it->second->dst));
@@ -279,8 +251,8 @@ void EventHandler::dispatch(std::shared_ptr<Event> dispatchJob, long int now) {
 	     return;
 	   }
 	   if (DEBUG)
-	     std::cout<<"Update listening socket "<<sockfd<<" for conn "<<dispatchJob->conn_id<<std::endl;
-	   newConnectionUpdate(sockfd, dispatchJob->conn_id, dispatchJob->ms_from_start+SRV_UPSTART, now); 
+	     std::cout<<"Update listening socket "<<sockfd<<" for conn "<<dispatchJob.conn_id<<std::endl;
+	   newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start+SRV_UPSTART, now); 
 	   if(listen(sockfd, MAX_BACKLOG_PER_SRV) == -1) {
 	     perror("Listen failed");
 	     return;
@@ -333,20 +305,19 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
   memset(buf, 'a', MAXLEN);
   if (DEBUG)
   std::cout<<"EH: looping, incoming file events "<<incomingFileEvents<<"\n";
-  long int nextEventTime = (*incomingFileEvents).nextEventTime();
   if (DEBUG)
   std::cout<<"EH: Is running is "<<isRunning.load()<<std::endl;
   long int start = 0, end = 0;
   int sends = 0;
   
   while(isRunning.load()) {
-    
-    //std::cout<<"Next event time "<<nextEventTime<<" now "<<now<<std::endl;
-    //std::cout <<"EH: Beginning of loop time " <<now<<std::endl;
+    long int nextEventTime = incomingFileEvents->nextEventTime();    
+    std::cout<<"Next event time "<<nextEventTime<<" now "<<now<<std::endl;
+    std::cout <<"EH: Beginning of loop time " <<now<<std::endl;
     while(nextEventTime <= now && nextEventTime >= 0) {
       std::shared_ptr<Event> job;
       //std::cout << "EH: Event handler TRYING TO GET JOB" << std::endl;
-      if((*incomingFileEvents).getEvent(job)){
+      if(incomingFileEvents->getEvent(job)){
                 fileEventsHandledCount++;
                 
                 /* Check if we've processed a fair chunk (maxQueuedFileEvents/10 events) and	*/
@@ -355,11 +326,11 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
                     lastEventCountWhenRequestingForMore = fileEventsHandledCount;
                     requestMoreFileEvents->sendSignal();
                 }
-                std::shared_ptr<Event> dispatchJob(job);
+                Event dispatchJob = *job;
 		if (DEBUG)
-                std::cout << "File Event handler GOT JOB " << EventNames[dispatchJob->type] <<" conn "<<dispatchJob->conn_id<<" event "<<dispatchJob->event_id<<" ms from start "<<dispatchJob->ms_from_start<<" value "<<dispatchJob->value<<std::endl;
+                std::cout << "File Event handler GOT JOB " << EventNames[dispatchJob.type] <<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<std::endl;
                 dispatch(dispatchJob, now);
-                nextEventTime = (*incomingFileEvents).nextEventTime();
+                nextEventTime = incomingFileEvents->nextEventTime();
                 //std::cout << "EVENT HANDLER: Pulled " << fileEventsHandledCount << " events. Next event time is " << nextEventTime << std::endl;
             }
             else {
@@ -383,14 +354,14 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	long int nextHeapEventTime = eventsToHandle->nextEventTime();
 	//std::cout<<"Next heap time "<<nextHeapEventTime<<" now "<<now<<std::endl;
 	
-
+  
 	while(nextHeapEventTime <= now && nextHeapEventTime >= 0) {
-	  std::shared_ptr<Event> job = eventsToHandle->nextEvent();
+	  Event dispatchJob = eventsToHandle->nextEvent();
 	  if(true){ // this was if (bool = got a job)
-                std::shared_ptr<Event> dispatchJob(job);
-		if (DEBUG)
-		  std::cout << "Heap Event handler GOT JOB " << EventNames[dispatchJob->type] <<" conn "<<dispatchJob->conn_id<<" event "<<dispatchJob->event_id<<" ms from start "<<dispatchJob->ms_from_start<<" value "<<dispatchJob->value<<std::endl;
-		if (dispatchJob->type == SEND)
+	    if (DEBUG)
+	      std::cout << "Heap Event handler GOT JOB " << EventNames[dispatchJob.type] <<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<std::endl;
+
+	    if (dispatchJob.type == SEND)
 		  {
 		    sends++;
 		    if (start == 0)
@@ -407,17 +378,10 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	      if (DEBUG)
                 std::cout << "We think we have a job, but failed to pull it? " << std::endl;
             }
-            job.reset();
-        }
+	}
 	
-        //std::cout << "EVENT HANDLER:  Next event time is: " << nextEventTime << " It's now: " << now << std::endl;
-        popWaitEvents();
         processAcceptEvents(now);
-        processRECVedEvents();
-        processSentEvents(); 
         now = msSinceStart(startTime);
-        checkDeferred(now);
-        //usleep(1000 * 1000);
         
         /* If the last time we checked the time in the events queue it was empty, redo our check now. */
 	if (sends == 2000 && end == 0)
@@ -426,7 +390,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	    std::cout<<"Ending time "<<end<<" sends "<<sends<<std::endl;
 	  }
 	// Check epoll events.
-        int timeout = 0;
+        int timeout = 1;
         if(nextEventTime - now > 0)
             timeout = nextEventTime - now;
 
@@ -526,21 +490,22 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 
 void EventHandler::getNewEvents(long int conn_id)
 {
-  EventQueue* e = (*connToEventQueue)[conn_id];
-  std::shared_ptr<Event> job;
+  EventHeap* e = (*connToEventQueue)[conn_id];
+  int nextEventTime = e->nextEventTime();
   // Get only one job
-  while(e->getEvent(job))
+  while (nextEventTime > 0)
     {
-      std::shared_ptr<Event> dispatchJob(job);
-      job->sockfd = connToSockfdIDMap[conn_id];
+      Event job = e->nextEvent();
+      job.sockfd = connToSockfdIDMap[conn_id];
       	if (DEBUG)
-      std::cout << "Event handler moved new JOB " << EventNames[dispatchJob->type] <<" conn "<<dispatchJob->conn_id<<" event "<<dispatchJob->event_id<<" for time "<<job->ms_from_start<<" to send "<<job->value<<" now moved to time "<<(job->ms_from_start+connToDelay[conn_id])<<" because of delay "<<connToDelay[conn_id]<<std::endl;
-      job->ms_from_start += connToDelay[conn_id];
-      eventsToHandle->addEvent(*dispatchJob);
-      if (job->type == RECV)
+      std::cout << "Event handler moved new JOB " << EventNames[job.type] <<" conn "<<job.conn_id<<" event "<<job.event_id<<" for time "<<job.ms_from_start<<" to send "<<job.value<<" now moved to time "<<(job.ms_from_start+connToDelay[conn_id])<<" because of delay "<<connToDelay[conn_id]<<std::endl;
+      job.ms_from_start += connToDelay[conn_id];
+      eventsToHandle->addEvent(job);
+      if (job.type == RECV)
 	break;
+      nextEventTime = e->nextEventTime();
     }
-  // Here we could perhaps close the connection Jelena
+  // Here we could perhaps close the connection if we're out of the events Jelena
 }
 
 bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now) {
@@ -598,7 +563,7 @@ bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now)
     return true; // Jelena    
 }
 
-EventHandler::EventHandler(EventNotifier* loadMoreNotifier, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventQueue*>* c2eq) {
+EventHandler::EventHandler(EventNotifier* loadMoreNotifier, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq) {
 
     fileEventsHandledCount = 0;
     lastEventCountWhenRequestingForMore = 0;

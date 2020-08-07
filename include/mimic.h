@@ -26,7 +26,7 @@ bool returnLoadMoreFileEvents();
 
 #define maxQueuedFileEvents 100000000
 
-#define SRV_UPSTART 1000
+#define SRV_UPSTART 2000
 
 extern std::atomic<bool> isRunning;
 

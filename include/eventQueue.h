@@ -66,7 +66,7 @@ class EventHeap {
         long int nextEventTime();
 	int getLength();
 	void print();
-        std::unique_ptr<Event> nextEvent();
+        Event nextEvent();
 };
 
 

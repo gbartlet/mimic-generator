@@ -3,7 +3,7 @@ project (mimic)
 find_package (Threads)
 
 include_directories("include")
-add_library(mimiclib STATIC src/pollHandler.cpp src/eventNotifier.cpp src/eventQueue.cpp src/event.cpp src/eventHandler.cpp src/mimic.cpp src/connections.cpp src/serverWorker.cpp src/fileWorker.cpp src/basicClient.cpp)
+add_library(mimiclib STATIC src/pollHandler.cpp src/eventNotifier.cpp src/eventQueue.cpp src/event.cpp src/eventHandler.cpp src/mimic.cpp src/connections.cpp  src/fileWorker.cpp)
 add_executable(mimic src/test.cpp)   
 #add_executable(basicClient src/basicClient.cpp)
 #add_executable(eventTest src/eventTest.cpp)

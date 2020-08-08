@@ -19,5 +19,5 @@ set (TestProj_VERSION_MINOR 0)
 set (CMAKE_CXX_COMPILER /usr/bin/clang++)
 #set (CMAKE_CXX_COMPILER /usr/bin/g++)
 
-set (CMAKE_CXX_FLAGS "-Wall -g -O2 --std=gnu++2a --stdlib=libc++ -DASIO_STANDALONE")
+set (CMAKE_CXX_FLAGS "-Wall -g -O0 --std=gnu++2a --stdlib=libc++ -DASIO_STANDALONE")
 #set (CMAKE_CXX_FLAGS "-Wall -g -DASIO_STANDALONE  -std=gnu++17")

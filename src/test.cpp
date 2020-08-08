@@ -265,8 +265,11 @@ int main(int argc, char* argv[]) {
     // Event notifier & poll for FileWorker.
     int notifierFD = createEventFD();
     EventNotifier* loadMoreNotifier = new EventNotifier(notifierFD, "Test file notifier.");
-    EventQueue * fileQ = new EventQueue("File events.");
-    EventQueue * fileQ2 = new EventQueue("File events 2.");
+    EventQueue** fileQ = (EventQueue**) malloc(numThreads*sizeof(EventQueue*));
+    
+    for (int i = 0; i< numThreads; i++)
+      fileQ[i] = new EventQueue("File events.");
+    
 
     notifierFD = createEventFD();
     EventNotifier * acceptNotifier = new EventNotifier(notifierFD, "Test accept notifier.");
@@ -292,15 +295,23 @@ int main(int argc, char* argv[]) {
     //eFiles2.push_back(eventFile);
     
     
-    FileWorker* fw = new FileWorker(loadMoreNotifier, fileQ, acceptQ, &c2eq, ipFile, connFile, eFiles);
+    FileWorker* fw = new FileWorker(loadMoreNotifier, fileQ, acceptQ, &c2eq, ipFile, eFiles, numThreads, true);
     fw->startup();
     ConnectionPairMap * ConnIDtoConnectionPairMap = fw->getConnectionPairMap();
     //FileWorker* fw2 = new FileWorker(loadMoreNotifier, fileQ2, acceptQ, &c2eq2, ipFile, connFile2, eFiles2);
     //fw2->startup();
     //ConnectionPairMap * ConnIDtoConnectionPairMap2 = fw2->getConnectionPairMap();
 
-    EventHandler* eh = new EventHandler(loadMoreNotifier, fileQ, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
-    eh->startup();
+    EventHandler* ehl = new EventHandler(loadMoreNotifier, fileQ[0], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
+    ehl->startup();
+    
+    EventHandler** eh = (EventHandler**)malloc(numThreads*sizeof(EventHandler*));
+    
+    for (int i=0;i<numThreads;i++)
+      {
+	eh[i] = new EventHandler(loadMoreNotifier, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
+	eh[i]->startup();
+      }
     //EventHandler* eh2 = new EventHandler(loadMoreNotifier, fileQ2, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap2, &c2eq2);
     //eh2->startup();
     
@@ -319,17 +330,22 @@ int main(int argc, char* argv[]) {
     //std::thread serverWorkerThread(&ServerWorker::loop, sw, startPoint);                     
         
     /* Event Handler. */
-    std::thread eventHandlerThread(&EventHandler::loop, eh, startPoint);
+    std::thread** eventHandlerThread = (std::thread**)malloc(numThreads*sizeof(std::thread*));
+
+    for (int i=0; i<numThreads; i++)
+      {
+	eventHandlerThread[i] = new std::thread(&EventHandler::loop, eh[i], startPoint);
+      }
     //std::thread eventHandlerThread2(&EventHandler::loop, eh2, startPoint);
     
     usleep(10000000 * 10);
     
     isRunning.store(false);
     fileWorkerThread.join();
-    //fileWorkerThread2.join();
-    //serverWorkerThread.join();
-    eventHandlerThread.join();
-    //eventHandlerThread2.join();
+    
+    for (int i=0; i<numThreads; i++)
+      eventHandlerThread[i]->join();
+
     EventQueue* eq = new EventQueue();
     std::thread connThread(connectionHandlerThread,numConns, sendQ);
     connThread.join();

@@ -4,11 +4,12 @@
 #include "mimic.h"
 
 
-FileWorker::FileWorker(EventNotifier* loadMoreNotifier, EventQueue* out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::string& connFile, std::vector<std::string>& eFiles, bool useMMapFlag) {
+FileWorker::FileWorker(EventNotifier* loadMoreNotifier, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, int nt, bool useMMapFlag) {
   
     fileEventsAddedCount = 0;
     useMMap = useMMapFlag;
     ConnectionEQ = c2eq;
+    numThreads = nt;
     
     /* Deal with our notifier where the EventHandler can prompt us to load more events. */
     loadEventsNotifier = loadMoreNotifier;
@@ -22,7 +23,6 @@ FileWorker::FileWorker(EventNotifier* loadMoreNotifier, EventQueue* out, EventQu
     outEvents = out;
     acceptEvents = accept;
     IPListFile = ipFile;
-    connectionFile = connFile;
     eventsFiles = eFiles;
 
 
@@ -170,7 +170,9 @@ bool FileWorker::isMyConnID(long int connID) {
 void FileWorker::loadEvents() {
   if (DEBUG)
     std::cout << "Loading events." << std::endl;
-    
+
+    int currentThread = 0;
+
     int eventsProduced = 0;
     int eventsToGet = maxQueuedFileEvents;
     
@@ -321,73 +323,6 @@ bool FileWorker::startup() {
     }    
     infile.close();
     
-    /* Load our connections. 
-    myConnIDs = {};
-    connIDToConnectionPairMap = {};
-    try {
-        infile.open(connectionFile.c_str(), std::ios::in);
-    }
-    catch(std::ios_base::failure& e) {
-        std::cerr << e.what() << std::endl;
-    }
-    std::vector <std::vector <std::string>> connData = loadFile(&infile, 8, -1);
-    if (DEBUG)
-      std::cout<<"Conn data size "<<connData.size()<<std::endl;
-    for(std::vector<int>::size_type i = 0; i != connData.size(); i++) {
-        long int connID;
-        try {
-            connID = std::stol(connData[i][2].c_str());
-        }
-        catch(...){
-            perror("Problem with connData line, continuing.");
-            continue;
-        }
-        std::string src = trim(connData[i][3]);
-        int sport = std::stoi(connData[i][4].c_str());
-        std::string dst = trim(connData[i][6]);
-        int dport = std::stoi(connData[i][7].c_str());
-	if (DEBUG)
-	  std::cout << "Check if IP '" << src << "' and '" << dst << "' are in my connections." << std::endl;
-        if(isMyIP(src) || isMyIP(dst)) {
-            // Add this connid to our ids.
-	    if (DEBUG)
-	      std::cout << "Adding " << connID << " to my connection ids." << std::endl;
-            myConnIDs.insert(connID);
-            
-            // Fill out connIDToConnectionPairMap 
-            connectionPair cp = connectionPair(src, sport, dst, dport);
-            connIDToConnectionPairMap[connID] = std::make_shared<connectionPair>(cp);
-            
-            // Add an event to start this connection. 
-            Event e;
-            e.conn_id = connID;
-            e.event_id = -1;
-            e.value = -1;
-            e.ms_from_start = 0;
-            e.ms_from_last_event = 0;
-            if(isMyIP(src)) {
-                e.ms_from_start = stod(connData[i][1])*1000;
-                e.type = CONNECT;
-		  if (DEBUG)
-		    std::cout<<"Adding connect event for conn "<<e.conn_id<<"\n";
-		(*ConnectionEQ)[e.conn_id] = new EventHeap();
-            }
-            else {
-          
-	      e.ms_from_start = std::max((long int)(std::stod(connData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
-	      e.type = SRV_START;
-	      if (DEBUG)
-		std::cout<<"Adding server event for conn "<<e.conn_id<<"\n";
-	      (*ConnectionEQ)[e.conn_id] = new EventHeap();
-            }
-	    shortTermHeap->addEvent(e);                                                     
-        }
-        src.clear();
-        dst.clear();
-    }
-    infile.close();
-
-    */
     /* Set ourselves up for the first event file.*/
     /* XXX Should check if our event files are time ordered. */
     loadEvents();
@@ -396,6 +331,8 @@ bool FileWorker::startup() {
 
 void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) {
     long int nextET = -1;
+    int currentThread = 0;
+    
     if (DEBUG)
       std::cout<<"FW looping heap has "<<shortTermHeap->getLength()<<" events\n";
     shortTermHeap->print();
@@ -410,7 +347,11 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	  if (DEBUG)
 	    std::cout << "Adding event with time: " << shortTermHeap->nextEventTime() << " time of last event added " << lastEventTime <<  std::endl;
 	  std::shared_ptr<Event> e_shr = std::make_shared<Event>(e);
-	  outEvents->addEvent(e_shr);
+	  outEvents[currentThread]->addEvent(e_shr);
+	  currentThread ++;
+	  // Round robin assignment to queues
+	  if (currentThread == numThreads)
+	    currentThread = 0;
 	  e_shr.reset();
 	  fileEventsAddedCount++;
 	  if(fileEventsAddedCount > maxQueuedFileEvents) {

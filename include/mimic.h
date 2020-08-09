@@ -16,7 +16,7 @@
 #include <condition_variable>
 #include "connections.h"
 
-#define DEBUG 0
+#define DEBUG 1
 
 /* Mutexes and condition variables. */
 extern std::mutex fileHandlerMTX;
@@ -61,6 +61,7 @@ enum DomainType {
 
 class Event {
     public:
+        std::string serverString = "";
         int sockfd = -1;
         long int ms_from_start = 1;	 /* Keep track of event time relative to start in ms. */
         long int ms_from_last_event = -1;

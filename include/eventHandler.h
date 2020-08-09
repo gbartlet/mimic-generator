@@ -90,6 +90,9 @@ class EventHandler {
         ConnectionPairMap * connIDToConnectionMap;
         stringToConnIDMap strToConnID;
         std::unordered_map<int, int long> sockfdToConnIDMap;
+	std::unordered_map<std::string, int long> serverToSockfd;
+	std::unordered_map<std::string, int long> serverToCounter;
+	std::unordered_map<int long, std::string> connToServerString;
         std::unordered_map<long int, int> connToSockfdIDMap;
         std::unordered_map<long int, int> connToWaitingToRecv;
         std::unordered_map<long int, int> connToWaitingToSend;
@@ -98,6 +101,8 @@ class EventHandler {
 	std::unordered_map<long int, conn_state> connState;
         std::unordered_map<long int, long int> connToLastCompletedEvent;
         std::unordered_map<long int, EventHeap*>* connToEventQueue;
+	std::unordered_map<long int, long int>* connTime;
+	std::unordered_map<std::string, long int>* listenerTime;
         
         EventHeap waitHeap;
 
@@ -111,7 +116,7 @@ class EventHandler {
         bool acceptNewConnection(struct epoll_event *poll_e, long int now);
 	void getNewEvents(long int conn_id);	
     public:
-        EventHandler(EventNotifier* loadMoreNotifier, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq);
+        EventHandler(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq);
         ~EventHandler();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

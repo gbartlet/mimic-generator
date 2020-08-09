@@ -116,7 +116,13 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
     switch(dispatchJob.type) {
         /* We note these as events in our connection structure. */
         case ACCEPT: {
+	  if (serverToCounter.find(dispatchJob.serverString) == serverToCounter.end())
+	    serverToCounter[dispatchJob.serverString] = 0;
+	  serverToCounter[dispatchJob.serverString]++;
+	  if (DEBUG)
+	    std::cout<<"Server "<<dispatchJob.serverString<<" connections "<<serverToCounter[dispatchJob.serverString]<<std::endl;
 	  newConnectionUpdate(dispatchJob.sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start, now);
+	  connToServerString[dispatchJob.conn_id] = dispatchJob.serverString;
 	  myPollHandler->watchForWrite(connToSockfdIDMap[dispatchJob.conn_id]);
 	  if (DEBUG)
 	    std::cout<<"PH will watch for write on "<<connToSockfdIDMap[dispatchJob.conn_id]<<" for conn "<<dispatchJob.conn_id<<std::endl;
@@ -179,7 +185,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 		    std::cout<<"Didn't connect right away\n";
 		  if (errno != EINPROGRESS)
 		    {
-		      close(sockfd);
+		      close(sockfd); // should return to pool and try later Jelena
 		      perror("Connecting");
 		      return;
 		    }
@@ -204,7 +210,6 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
             }
             break;
         }
-            
         /* Send thread handles these. */
     case SEND: {
       connectionUpdate(dispatchJob.conn_id, dispatchJob.ms_from_start, now);
@@ -252,7 +257,8 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	   }
 	   if (DEBUG)
 	     std::cout<<"Update listening socket "<<sockfd<<" for conn "<<dispatchJob.conn_id<<std::endl;
-	   newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start+SRV_UPSTART, now); 
+	   newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start+SRV_UPSTART, now);
+	   serverToSockfd[dispatchJob.serverString] = sockfd;
 	   if(listen(sockfd, MAX_BACKLOG_PER_SRV) == -1) {
 	     perror("Listen failed");
 	     return;
@@ -261,9 +267,32 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	   printf("Starting server.");
 	   break;
         }
-        case SRV_END: {
-            printf("Stopping server.");
-            break;
+    case CLOSE:{
+      // Don't check anything, just close
+      close(dispatchJob.sockfd);
+      if (connToServerString.find(dispatchJob.conn_id) != connToServerString.end())
+	serverToCounter[connToServerString[dispatchJob.conn_id]] --;
+      if (DEBUG)
+	std::cout<<"Closed sock "<<dispatchJob.sockfd<<" for conn "<<dispatchJob.conn_id<<std::endl;
+      // Jelena: clean all the connection state
+      break;
+    }
+    case SRV_END: {
+	  if (serverToCounter[dispatchJob.serverString] == 0)
+	    {
+	      if (DEBUG)
+		std::cout<<"Stopping server "<<dispatchJob.serverString<<" time "<<now<<" sock "<<serverToSockfd[dispatchJob.serverString]<<std::endl;
+	      close(serverToSockfd[dispatchJob.serverString]); // should account for delays in connections
+	    }
+	  // Try again after a while
+	  else
+	    {
+	      if (DEBUG)
+		std::cout<<"Would like to stop server "<<dispatchJob.serverString<<" time "<<now<<" sock "<<serverToSockfd[dispatchJob.serverString]<<" but counter is "<<serverToCounter[dispatchJob.serverString]<<std::endl;
+	      dispatchJob.ms_from_start = now + SRV_UPSTART;
+	      eventsToHandle->addEvent(dispatchJob);
+	    }
+	  break;
         }
         /* Not sure how we got here. */
         default: {
@@ -312,7 +341,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
   
   while(isRunning.load()) {
     long int nextEventTime = incomingFileEvents->nextEventTime();    
-    //std::cout<<"Next event time "<<nextEventTime<<" now "<<now<<std::endl;
+    //std::cout<<"Next zevent time "<<nextEventTime<<" now "<<now<<std::endl;
     //std::cout <<"EH: Beginning of loop time " <<now<<std::endl;
     while(nextEventTime <= now && nextEventTime >= 0) {
       std::shared_ptr<Event> job;
@@ -328,7 +357,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
                 }
                 Event dispatchJob = *job;
 		if (DEBUG)
-                std::cout << "File Event handler GOT JOB " << EventNames[dispatchJob.type] <<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<std::endl;
+		  std::cout << "File Event handler GOT JOB " << EventNames[dispatchJob.type] <<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<" server "<<dispatchJob.serverString<<std::endl;
                 dispatch(dispatchJob, now);
                 nextEventTime = incomingFileEvents->nextEventTime();
                 //std::cout << "EVENT HANDLER: Pulled " << fileEventsHandledCount << " events. Next event time is " << nextEventTime << std::endl;
@@ -407,7 +436,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  long int conn_id = sockfdToConnIDMap[fd];
 	  if (DEBUG)
 	    std::cout<<"Got event on sock "<<fd<<" w flags "<<poll_e->events<<" epoll in "<<EPOLLIN<<" out "<<EPOLLOUT<<" on conn "<<conn_id<<" w state "<<connState[conn_id]<<std::endl;
-	  if (connState[conn_id] == LISTENING && ((poll_e->events & EPOLLIN) > 0))
+	  if ((connState[conn_id] == LISTENING || connState.find(conn_id) == connState.end()) && ((poll_e->events & EPOLLIN) > 0))
 	    {
 	      if (DEBUG)
 	      std::cout<<"EH got ACCEPT event and should accept connection\n";
@@ -501,9 +530,22 @@ void EventHandler::getNewEvents(long int conn_id)
       std::cout << "Event handler moved new JOB " << EventNames[job.type] <<" conn "<<job.conn_id<<" event "<<job.event_id<<" for time "<<job.ms_from_start<<" to send "<<job.value<<" now moved to time "<<(job.ms_from_start+connToDelay[conn_id])<<" because of delay "<<connToDelay[conn_id]<<std::endl;
       job.ms_from_start += connToDelay[conn_id];
       eventsToHandle->addEvent(job);
+      nextEventTime = e->nextEventTime();
+      if (nextEventTime < 0)
+	{
+	  Event job;
+	  job.sockfd = connToSockfdIDMap[conn_id];
+	  job.ms_from_start = (*connTime)[conn_id] + connToDelay[conn_id] + 1;
+	  job.type = CLOSE;
+	  job.conn_id = conn_id;
+	  job.event_id = -1;
+	  job.value = -1;
+	  job.ms_from_last_event = 0;
+	  eventsToHandle->addEvent(job);
+	  return;
+	}
       if (job.type == RECV)
 	break;
-      nextEventTime = e->nextEventTime();
     }
   // Here we could perhaps close the connection if we're out of the events Jelena
 }
@@ -518,6 +560,12 @@ bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now)
     newSockfd = accept(fd, &in_addr, (socklen_t*)&in_addr_size);
     if (DEBUG)
       std::cout<<"Accepted connection\n";
+    std::string serverString = getIPPortString((struct sockaddr_in*)&in_addr);
+    if (serverToCounter.find(serverString) == serverToCounter.end())
+	    serverToCounter[serverString] = 0;
+	  serverToCounter[serverString]++;
+	  if (DEBUG)
+	    std::cout<<"Server "<<serverString<<" connections "<<serverToCounter[serverString]<<std::endl;
     /* Set nonblocking. */
     int status = 0;
     status = setIPv4TCPNonBlocking(newSockfd);
@@ -563,14 +611,13 @@ bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now)
     return true; // Jelena    
 }
 
-EventHandler::EventHandler(EventNotifier* loadMoreNotifier, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq) {
+EventHandler::EventHandler(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq) {
 
     fileEventsHandledCount = 0;
     lastEventCountWhenRequestingForMore = 0;
 
     connIDToConnectionMap = ConnMap;
     incomingFileEvents = fe;
-    requestMoreFileEvents = loadMoreNotifier;
     incomingAcceptedEvents = ae;
     incomingRECVedEvents = re;
     incomingSentEvents = se;
@@ -584,7 +631,11 @@ EventHandler::EventHandler(EventNotifier* loadMoreNotifier, EventQueue* fe, Even
     connToWaitingToRecv = {};
     connToWaitingToSend = {};
     connToLastCompletedEvent = {};
-
+    serverToCounter = {};
+    connToServerString = {};
+    connTime = c2time;
+    listenerTime = l2time;
+    
     eventsToHandle = new EventHeap();
     myPollHandler = new PollHandler();
 }	

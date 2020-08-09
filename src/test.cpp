@@ -293,23 +293,21 @@ int main(int argc, char* argv[]) {
     eFiles.push_back(eventFile);
     //eventFile = "events2.csv";
     //eFiles2.push_back(eventFile);
+    std::unordered_map<long int, long int> c2time;
+    std::unordered_map<std::string, long int> l2time;
     
-    
-    FileWorker* fw = new FileWorker(loadMoreNotifier, fileQ, acceptQ, &c2eq, ipFile, eFiles, numThreads, true);
+    FileWorker* fw = new FileWorker(&c2time, &l2time, fileQ, acceptQ, &c2eq, ipFile, eFiles, numThreads, true);
     fw->startup();
     ConnectionPairMap * ConnIDtoConnectionPairMap = fw->getConnectionPairMap();
     //FileWorker* fw2 = new FileWorker(loadMoreNotifier, fileQ2, acceptQ, &c2eq2, ipFile, connFile2, eFiles2);
     //fw2->startup();
     //ConnectionPairMap * ConnIDtoConnectionPairMap2 = fw2->getConnectionPairMap();
 
-    EventHandler* ehl = new EventHandler(loadMoreNotifier, fileQ[0], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
-    ehl->startup();
-    
     EventHandler** eh = (EventHandler**)malloc(numThreads*sizeof(EventHandler*));
     
     for (int i=0;i<numThreads;i++)
       {
-	eh[i] = new EventHandler(loadMoreNotifier, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
+	eh[i] = new EventHandler(&c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
 	eh[i]->startup();
       }
     //EventHandler* eh2 = new EventHandler(loadMoreNotifier, fileQ2, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap2, &c2eq2);

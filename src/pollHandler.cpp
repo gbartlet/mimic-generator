@@ -46,8 +46,8 @@ void PollHandler::watch(int fd, epollWatchType type) {
         return;
     }
     
-    /* We've failed to watch this fd. */
-    std::cerr << "Unable to add fd to epoll to watch for read." << std::endl;
+    /* We've failed to watch this fd, fail silently*/
+    //std::cerr << "Unable to add fd to epoll to watch for read." <<fd<<" error "<<errno<<" no mem "<<ENOMEM<<std::endl;
   }
   
   return;

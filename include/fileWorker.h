@@ -74,10 +74,12 @@ class FileWorker {
         long int loopEventCount = 0;
         long int lastEventTime = 0;
         std::unordered_map<long int, EventHeap*>* ConnectionEQ = 0;
+	std::unordered_map<long int, long int>* connTime = 0;
+	std::unordered_map<std::string, long int>* listenerTime = 0;
         bool useMMap;
 
     public:
-        FileWorker(EventNotifier* loadMoreNotifier, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, int nt, bool useMMap=true);
+        FileWorker(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, int nt, bool useMMap=true);
         ~FileWorker();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

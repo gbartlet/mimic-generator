@@ -4,15 +4,16 @@
 #include "mimic.h"
 
 
-FileWorker::FileWorker(EventNotifier* loadMoreNotifier, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, int nt, bool useMMapFlag) {
+FileWorker::FileWorker(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, int nt, bool useMMapFlag) {
   
     fileEventsAddedCount = 0;
     useMMap = useMMapFlag;
     ConnectionEQ = c2eq;
+    connTime = c2time;
+    listenerTime = l2time;
     numThreads = nt;
     
     /* Deal with our notifier where the EventHandler can prompt us to load more events. */
-    loadEventsNotifier = loadMoreNotifier;
     loadEventsPollHandler = new PollHandler();
     //loadEventsPollHandler->watchForRead(loadMoreNotifier->myFD());
     
@@ -219,6 +220,10 @@ void FileWorker::loadEvents() {
 	    int sport = std::stoi(eventData[i][4].c_str());
 	    std::string dst = trim(eventData[i][6]);
 	    int dport = std::stoi(eventData[i][7].c_str());
+	    char ports[10];
+	    sprintf(ports, "%d", dport);
+	    std::string servString = dst + ":" + ports;
+	    
 	    if (DEBUG)
 	      std::cout << "Check if IP '" << src << "' and '" << dst << "' are in my connections." << std::endl;
 	    if(isMyIP(src) || isMyIP(dst)) {
@@ -233,6 +238,7 @@ void FileWorker::loadEvents() {
 	      
 	      /* Add an event to start this connection. */
 	      Event e;
+	      e.serverString = servString;
 	      e.conn_id = connID;
 	      e.event_id = -1;
 	      e.value = -1;
@@ -247,11 +253,18 @@ void FileWorker::loadEvents() {
 	      }
 	      else {
                 /* XXX Have we started a server for this IP:port yet? If not, add event. */
-		e.ms_from_start = std::max((long int)(std::stod(eventData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
-		e.type = SRV_START;
 		if (DEBUG)
-		  std::cout<<"Adding server event for conn "<<e.conn_id<<"\n";
+		  std::cout<<"Server string "<<servString<<std::endl;
+		e.serverString = servString;
+		if (listenerTime->find(servString) == listenerTime->end())
+		  {
+		    e.ms_from_start = std::max((long int)(std::stod(eventData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
+		    e.type = SRV_START;
+		    if (DEBUG)
+		      std::cout<<"Adding server event START for server "<<e.serverString<<" for conn "<<e.conn_id<<"\n";
+		  }
 		(*ConnectionEQ)[e.conn_id] = new EventHeap();
+		(*listenerTime)[servString] = e.ms_from_start+2*SRV_UPSTART;
 	      }
 	      shortTermHeap->addEvent(e);
 	    }
@@ -287,6 +300,7 @@ void FileWorker::loadEvents() {
 		if (DEBUG)
 		  std::cout<<"Event for conn "<<e.conn_id<<" event id "<<e.event_id<<" type "<<EventNames[e.type]<<" value "<<e.value<<std::endl;
 		(*ConnectionEQ)[e.conn_id]->addEvent(e);
+		(*connTime)[e.conn_id] = e.ms_from_start;
 		//shortTermHeap->addEvent(e);
 		eventsProduced = eventsProduced + 1;
 	      }
@@ -295,6 +309,22 @@ void FileWorker::loadEvents() {
 	  }
       }
     }
+    // Now go through times when server should end and add those
+    for(auto it = listenerTime->begin(); it != listenerTime->end(); it++)
+      {
+	Event e;
+	e.serverString = it->first;
+	e.conn_id = -1;
+	e.event_id = -1;
+	e.value = -1;
+	e.ms_from_start = it->second;
+	e.ms_from_last_event = 0;
+	e.type = SRV_END;
+	shortTermHeap->addEvent(e);
+	if (e.ms_from_start > lastEventTime)
+	  lastEventTime = e.ms_from_start;
+	std::cout<<"Created srv end job for "<<e.serverString<<" at time "<<e.ms_from_start<<std::endl;
+      }
     if (DEBUG)
       std::cout << "Loaded " << eventsProduced << " events from file"<<std::endl;
     shortTermHeap->print();

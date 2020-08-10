@@ -276,7 +276,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
       close(dispatchJob.sockfd);
       if (connToServerString.find(dispatchJob.conn_id) != connToServerString.end())
 	serverToCounter[connToServerString[dispatchJob.conn_id]] --;
-      if (DEBUG)
+      //if (DEBUG)
 	std::cout<<"Closed sock "<<dispatchJob.sockfd<<" for conn "<<dispatchJob.conn_id<<std::endl;
       // Jelena: clean all the connection state
       break;
@@ -610,8 +610,9 @@ long int EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int 
     // XXX We assume this is IPv4/TCP for now.
     std::string connString = getConnString((const struct sockaddr_in *)&in_addr, (const struct sockaddr_in*)&sa_srv, &success);
     if(!success) return -1;
-    
-    std::cout << "Got connection from: " << connString << std::endl;
+
+    if (DEBUG)
+      std::cout << "Got connection from: " << connString << std::endl;
 
     /* Map names to a conn. */
     auto it = strToConnID.find(connString);

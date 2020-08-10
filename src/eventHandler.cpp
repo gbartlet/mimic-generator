@@ -446,14 +446,21 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	      std::cout<<"EH got ACCEPT event and should accept connection\n";
 	      /* New connection to one of our servers. */
 	      /* it could be more than one ACCEPT */
-	      //do
-	      //{
+	      while(true)
+		{
 		  conn_id = acceptNewConnection(poll_e, now);
+		  if (conn_id == -1)
+		    {
+		      if (DEBUG)
+			std::cout<<"Nothing more to accept\n";
+		      break;
+		    }
 		  connState[conn_id] = EST;
 		  if (DEBUG)
 		    std::cout<<"State is now "<<connState[conn_id]<<std::endl;
 		  getNewEvents(conn_id);
-		  //}while(conn_id > -1);
+		};
+	      continue;
 	    }
 	  if (connState[conn_id] == CONNECTING) // && (poll_e->events & EPOLLOUT > 0))
 	    {
@@ -466,6 +473,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	      if (DEBUG)
 	      std::cout<<"Connected successfully, conn "<<conn_id<<" state is now "<<connState[conn_id]<<std::endl;
 	      getNewEvents(conn_id);
+	      continue;
 	   }
 	  if (connState[conn_id] == EST && ((poll_e->events & EPOLLOUT) > 0))
 	    {

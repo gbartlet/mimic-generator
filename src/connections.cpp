@@ -103,3 +103,23 @@ int getIPv4TCPSock(const struct sockaddr_in * sa) {
 
     return s;
 }
+
+#define MS 30
+
+void getAddrFromString(std::string servString, struct sockaddr_in* addr)
+{
+  char s[MS];
+  std::strcpy(s, servString.c_str());
+  int i;
+  for(i=0; i<strlen(s); i++)
+    {
+      if (s[i] == ':')
+	{
+	  s[i] = 0;
+	  break;
+	}
+    }
+  addr->sin_family = AF_INET;
+  addr->sin_port = htons(atoi(s+i+1));
+  inet_aton(s, &addr->sin_addr);
+}

@@ -16,7 +16,7 @@
 #include <condition_variable>
 #include "connections.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 /* Mutexes and condition variables. */
 extern std::mutex fileHandlerMTX;

@@ -16,9 +16,6 @@
 #include "pollHandler.h"
 #include "mimic.h"
 
-#define MAX_BACKLOG_PER_SRV 5
-
-
 
 /*
 class Connection {
@@ -113,7 +110,7 @@ class EventHandler {
         void dispatch(Event dispatchJob, long int now);
         void newConnectionUpdate(int sockfd, long int connID, long int planned, long int now);
 	void connectionUpdate(long int connID, long int planned, long int now);
-        bool acceptNewConnection(struct epoll_event *poll_e, long int now);
+	long int acceptNewConnection(struct epoll_event *poll_e, long int now);
 	void getNewEvents(long int conn_id);	
     public:
         EventHandler(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq);

@@ -13,7 +13,6 @@
 #include <unordered_map>
 #include "mimic.h"
 
-#define MAX_BACKLOG_PER_SRV 5
 
 class compareEvents {
     public:

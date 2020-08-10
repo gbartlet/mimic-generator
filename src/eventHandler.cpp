@@ -1,7 +1,7 @@
 #include "eventHandler.h"
 #include "connections.h"
 
-#define MAX_BACKLOG_PER_SRV 5
+#define MAX_BACKLOG_PER_SRV 10
 
 /* We start 3 threads */
 /*	- a server thread (takes in start/stop req, produces accepted events.)  */
@@ -240,24 +240,28 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
         /* We handle these. */
         case SRV_START: {
 	  
-	  connToLastPlannedEvent[dispatchJob.conn_id] = dispatchJob.ms_from_start;
+	  //connToLastPlannedEvent[dispatchJob.conn_id] = dispatchJob.ms_from_start;
 	  // Create event and put into server queue
-	  connState[dispatchJob.conn_id] = LISTENING;
+	  //connState[dispatchJob.conn_id] = LISTENING;
 	  //serverStartnStopReq->addEvent(dispatchJob);
-	  auto it = connIDToConnectionMap->find(dispatchJob.conn_id);
-	  if(it == connIDToConnectionMap->end()) {
-	     std::cerr << "Asked to start server for connection ID " << dispatchJob.conn_id << " but this does not map to a known connection." << std::endl;
-	     break;
-	   }
-	   std::string servString = getIPPortString((const struct sockaddr_in*)&(it->second->dst));
-	   int sockfd = getIPv4TCPSock((const struct sockaddr_in*)&(it->second->dst));
+	  //auto it = connIDToConnectionMap->find(dispatchJob.conn_id);
+	  //if(it == connIDToConnectionMap->end()) {
+	  // std::cerr << "Asked to start server for connection ID " << dispatchJob.conn_id << " but this does not map to a known connection." << std::endl;
+	  // break;
+	  //}
+	  std::string servString = dispatchJob.serverString;
+	  struct sockaddr_in addr;
+	  getAddrFromString(servString, &addr);
+			    
+	  int sockfd = getIPv4TCPSock((const struct sockaddr_in*)&addr);
 	   if(sockfd == -1) {
 	     std::cerr << "ERROR: Failed to bind to " << servString << std::endl;
 	     return;
 	   }
-	   if (DEBUG)
-	     std::cout<<"Update listening socket "<<sockfd<<" for conn "<<dispatchJob.conn_id<<std::endl;
-	   newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start+SRV_UPSTART, now);
+	   //if (DEBUG)
+	   //std::cout<<"Update listening socket "<<sockfd<<" for conn "<<dispatchJob.conn_id<<std::endl;
+	   //newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start+SRV_UPSTART, now);
+	   sockfdToConnIDMap[sockfd] = -1; // Generic listening sock
 	   serverToSockfd[dispatchJob.serverString] = sockfd;
 	   if(listen(sockfd, MAX_BACKLOG_PER_SRV) == -1) {
 	     perror("Listen failed");
@@ -435,17 +439,21 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  int fd = poll_e->data.fd;
 	  long int conn_id = sockfdToConnIDMap[fd];
 	  if (DEBUG)
-	    std::cout<<"Got event on sock "<<fd<<" w flags "<<poll_e->events<<" epoll in "<<EPOLLIN<<" out "<<EPOLLOUT<<" on conn "<<conn_id<<" w state "<<connState[conn_id]<<std::endl;
-	  if ((connState[conn_id] == LISTENING || connState.find(conn_id) == connState.end()) && ((poll_e->events & EPOLLIN) > 0))
+	    std::cout<<"Got event on sock "<<fd<<" w flags "<<poll_e->events<<" epoll in "<<EPOLLIN<<" out "<<EPOLLOUT<<" on conn "<<conn_id<<std::endl;
+	  if (conn_id == -1 && ((poll_e->events & EPOLLIN) > 0))
 	    {
 	      if (DEBUG)
 	      std::cout<<"EH got ACCEPT event and should accept connection\n";
 	      /* New connection to one of our servers. */
-	      acceptNewConnection(poll_e, now);
-	      connState[conn_id] = EST;
-	      if (DEBUG)
-	      std::cout<<"State is now "<<connState[conn_id]<<std::endl;
-	      getNewEvents(conn_id);
+	      /* it could be more than one ACCEPT */
+	      //do
+	      //{
+		  conn_id = acceptNewConnection(poll_e, now);
+		  connState[conn_id] = EST;
+		  if (DEBUG)
+		    std::cout<<"State is now "<<connState[conn_id]<<std::endl;
+		  getNewEvents(conn_id);
+		  //}while(conn_id > -1);
 	    }
 	  if (connState[conn_id] == CONNECTING) // && (poll_e->events & EPOLLOUT > 0))
 	    {
@@ -550,7 +558,7 @@ void EventHandler::getNewEvents(long int conn_id)
   // Here we could perhaps close the connection if we're out of the events Jelena
 }
 
-bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now) {
+long int EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now) {
     int newSockfd = -1;
     struct sockaddr in_addr;
     int in_addr_size = sizeof(in_addr);
@@ -558,6 +566,8 @@ bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now)
     
     /* Accept new connection. */ 
     newSockfd = accept(fd, &in_addr, (socklen_t*)&in_addr_size);
+    if (newSockfd == -1)
+      return -1;
     if (DEBUG)
       std::cout<<"Accepted connection\n";
     std::string serverString = getIPPortString((struct sockaddr_in*)&in_addr);
@@ -569,10 +579,10 @@ bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now)
     /* Set nonblocking. */
     int status = 0;
     status = setIPv4TCPNonBlocking(newSockfd);
-    	if (DEBUG)
-    std::cout<<"EH setting nonblocking on socket "<<newSockfd<<std::endl;
+    if (DEBUG)
+      std::cout<<"EH setting nonblocking on socket "<<newSockfd<<std::endl;
     if(status < 0) {
-        return false;
+        return -1;
     }
     
 
@@ -586,12 +596,12 @@ bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now)
     // XXX We assume this is IPv4/TCP for now.
     if(getsockname(fd, (sockaddr *)&sa_srv, (unsigned int *)&sa_len) == -1) {
         perror("getsockname() failed");
-        return false;
+        return -1;
     }
     bool success = false;
     // XXX We assume this is IPv4/TCP for now.
     std::string connString = getConnString((const struct sockaddr_in *)&in_addr, (const struct sockaddr_in*)&sa_srv, &success);
-    if(!success) return false;
+    if(!success) return -1;
     
     std::cout << "Got connection from: " << connString << std::endl;
 
@@ -599,16 +609,17 @@ bool EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int now)
     auto it = strToConnID.find(connString);
     if(it == strToConnID.end()) {
         std::cerr << "Got connection but could not look up connID." << std::endl;
-        return false; 
+        return -1; 
 	}
     long int conn_id = it->second;
-        
+    
     /* Update our data structures. */
+    connToLastPlannedEvent[conn_id] = now;
     newConnectionUpdate(newSockfd, conn_id, 0, now);
     /* XXX Add this to the watched sockets for reads. */
     if (DEBUG)
     std::cout<<"Updated new sock "<<newSockfd<<" for connection "<<conn_id<<std::endl;
-    return true; // Jelena    
+    return conn_id; // Jelena    
 }
 
 EventHandler::EventHandler(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq) {

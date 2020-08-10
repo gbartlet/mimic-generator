@@ -250,23 +250,31 @@ void FileWorker::loadEvents() {
 		if (DEBUG)
 		  std::cout<<"Adding connect event for conn "<<e.conn_id<<"\n";
 		(*ConnectionEQ)[e.conn_id] = new EventHeap();
+		shortTermHeap->addEvent(e);
 	      }
 	      else {
                 /* XXX Have we started a server for this IP:port yet? If not, add event. */
 		if (DEBUG)
 		  std::cout<<"Server string "<<servString<<std::endl;
 		e.serverString = servString;
+		e.ms_from_start = std::max((long int)(std::stod(eventData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
 		if (listenerTime->find(servString) == listenerTime->end())
 		  {
-		    e.ms_from_start = std::max((long int)(std::stod(eventData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
 		    e.type = SRV_START;
+		    (*listenerTime)[servString] = e.ms_from_start+2*SRV_UPSTART;
+		    shortTermHeap->addEvent(e);
+
 		    if (DEBUG)
 		      std::cout<<"Adding server event START for server "<<e.serverString<<" for conn "<<e.conn_id<<"\n";
 		  }
+		else if(e.ms_from_start > (*listenerTime)[servString] - 2*SRV_UPSTART)
+		  {
+		    (*listenerTime)[servString] = e.ms_from_start+2*SRV_UPSTART;
+		    if (DEBUG)
+		      std::cout<<"Changed listener time for "<<servString<<" to "<<(*listenerTime)[servString]<<std::endl;
+		  }
 		(*ConnectionEQ)[e.conn_id] = new EventHeap();
-		(*listenerTime)[servString] = e.ms_from_start+2*SRV_UPSTART;
 	      }
-	      shortTermHeap->addEvent(e);
 	    }
 	    src.clear();
 	    dst.clear();
@@ -298,17 +306,23 @@ void FileWorker::loadEvents() {
 		//std::cout << "Have event with time of " << e.ms_from_start << std::endl;
 		
 		if (DEBUG)
-		  std::cout<<"Event for conn "<<e.conn_id<<" event id "<<e.event_id<<" type "<<EventNames[e.type]<<" value "<<e.value<<std::endl;
+		  std::cout<<"Event for conn "<<e.conn_id<<" event id "<<e.event_id<<" type "<<EventNames[e.type]<<" value "<<e.value<<" time "<<e.ms_from_start<<std::endl;
 		(*ConnectionEQ)[e.conn_id]->addEvent(e);
 		(*connTime)[e.conn_id] = e.ms_from_start;
 		//shortTermHeap->addEvent(e);
 		eventsProduced = eventsProduced + 1;
 	      }
 	      lastEventTime = std::stod(eventData[i][7].c_str()) * 1000 + loopedCount * loopDuration;
+	      if (DEBUG)
+		std::cout<<"Lastevent "<<lastEventTime<<std::endl;
+	      //if (t > lastEventTime)
+	      //lastEventTime = t;
 	    }
 	  }
       }
     }
+      if (DEBUG)
+	std::cout<<"Last event time is "<<lastEventTime<<std::endl;
     // Now go through times when server should end and add those
     for(auto it = listenerTime->begin(); it != listenerTime->end(); it++)
       {
@@ -321,8 +335,9 @@ void FileWorker::loadEvents() {
 	e.ms_from_last_event = 0;
 	e.type = SRV_END;
 	shortTermHeap->addEvent(e);
-	if (e.ms_from_start > lastEventTime)
-	  lastEventTime = e.ms_from_start;
+	//if (e.ms_from_start > lastEventTime)
+	//lastEventTime = e.ms_from_start;
+	if (DEBUG)
 	std::cout<<"Created srv end job for "<<e.serverString<<" at time "<<e.ms_from_start<<std::endl;
       }
     if (DEBUG)

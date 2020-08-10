@@ -25,7 +25,6 @@
 #include "eventQueue.h"
 #include "mimic.h"
 
-#define MAX_BACKLOG_PER_SRV 5
 
 
 class FileWorker {

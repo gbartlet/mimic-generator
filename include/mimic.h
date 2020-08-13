@@ -27,6 +27,9 @@ bool returnLoadMoreFileEvents();
 
 #define SRV_UPSTART 2000
 
+#define SHORTLEN 50
+#define MEDLEN 255
+
 extern std::atomic<bool> isRunning;
 extern std::atomic<bool> isInitd;
 extern std::atomic<int> numThreads;

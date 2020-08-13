@@ -196,10 +196,26 @@ std::unordered_map<long int, struct stats> connStats;
 
 void print_stats()
 {
+  char myName[SHORTLEN], filename[MEDLEN];
+  gethostname(myName, SHORTLEN);
+  sprintf(filename, "connstats.%s.txt", myName);
+  std::ofstream myfile;
+  myfile.open(filename);
+  int completed = 0, total = 0;
+  int delay = 0;
   for (auto it=connStats.begin(); it != connStats.end(); it++)
     {
-      std::cout<<"Conn "<<it->first<<" state "<<it->second.state<<" total events "<<it->second.total_events<<" last event "<<it->second.last_completed<<" delay "<<it->second.delay<<std::endl;
+      total++;
+      myfile<<"Conn "<<it->first<<" state "<<it->second.state<<" total events "<<it->second.total_events<<" last event "<<it->second.last_completed<<" delay "<<it->second.delay<<std::endl;
+      if (it->second.state == DONE)
+	{
+	  completed++;
+	  delay += it->second.delay;
+	}
     }
+  double avgd = (double)delay/completed;
+  std::cout<<"Successfully completed "<<completed<<"/"<<total<<" avg delay "<<avgd<<" ms"<<std::endl;
+  myfile.close();
 }
 
 
@@ -348,8 +364,6 @@ int main(int argc, char* argv[]) {
     int n = numThreads.load();
     for (int i=0;i<numThreads.load();i++)
       {
-	std::cout<<"Queue "<<i<<" length "<<fileQ[i]->getLength()<<std::endl;
-	      
 	if (fileQ[i]->getLength() == 1)
 	  n--;
       }

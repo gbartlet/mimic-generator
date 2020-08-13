@@ -273,7 +273,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	     return;
 	   }
 	   myPollHandler->watchForRead(sockfd);
-	   printf("Starting server.");
+	   
 	   break;}
 	  
     case CLOSE:{
@@ -292,8 +292,8 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	  (*connStats)[dispatchJob.conn_id].last_completed++;
 	  if (connToServerString.find(dispatchJob.conn_id) != connToServerString.end())
 	    serverToCounter[connToServerString[dispatchJob.conn_id]] --;
-      //if (DEBUG)
-	  std::cout<<"Closed sock "<<dispatchJob.sockfd<<" for conn "<<dispatchJob.conn_id<<" last completed "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
+	  if (DEBUG)
+	    std::cout<<"Closed sock "<<dispatchJob.sockfd<<" for conn "<<dispatchJob.conn_id<<" last completed "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
 	}
       // Jelena: clean all the connection state here but not stats
       break;
@@ -357,8 +357,6 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
   std::cout<<"EH: looping, incoming file events "<<incomingFileEvents<<"\n";
   if (DEBUG)
   std::cout<<"EH: Is running is "<<isRunning.load()<<std::endl;
-  long int start = 0, end = 0;
-  int sends = 0;
   
   while(isRunning.load()) {
     long int nextEventTime = incomingFileEvents->nextEventTime();    
@@ -411,15 +409,6 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	    if (DEBUG)
 	      std::cout << "Heap Event handler GOT JOB " << EventNames[dispatchJob.type] <<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<std::endl;
 
-	    if (dispatchJob.type == SEND)
-		  {
-		    sends++;
-		    if (start == 0)
-		      {
-			start = msSinceStart(startTime);		       
-			std::cout<<"Starting time "<<start<<std::endl;
-		      }
-		  }
                 dispatch(dispatchJob, now);
                 nextHeapEventTime = eventsToHandle->nextEventTime();
                 //std::cout << "EVENT HANDLER: Pulled " << fileEventsHandledCount << " events. Next event time is " << nextEventTime << std::endl;
@@ -434,11 +423,6 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
         now = msSinceStart(startTime);
         
         /* If the last time we checked the time in the events queue it was empty, redo our check now. */
-	if (sends == 2000 && end == 0)
-	  {
-	    end = msSinceStart(startTime);
-	    std::cout<<"Ending time "<<end<<" sends "<<sends<<std::endl;
-	  }
 	// Check epoll events.
         int timeout = 1;
         if(nextEventTime - now > 0)

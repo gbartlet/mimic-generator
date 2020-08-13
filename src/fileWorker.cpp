@@ -346,7 +346,7 @@ void FileWorker::loadEvents() {
       }
     if (DEBUG)
       std::cout << "Loaded " << eventsProduced << " events from file"<<std::endl;
-    shortTermHeap->print();
+    //shortTermHeap->print();
 }
 
 bool FileWorker::startup() {
@@ -384,7 +384,7 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
     
     if (DEBUG)
       std::cout<<"FW looping heap has "<<shortTermHeap->getLength()<<" events\n";
-    shortTermHeap->print();
+    //shortTermHeap->print();
 
     while(isRunning.load()) {
         nextET = shortTermHeap->nextEventTime();

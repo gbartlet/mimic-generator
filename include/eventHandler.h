@@ -17,44 +17,6 @@
 #include "mimic.h"
 
 
-/*
-class Connection {
-    public:
-        bool isServer = true;
-        
-        EventType lastEvent = NONE;
-    
-        long timeLastEventCompleted = -1;
-    
-        // The type of connection this is
-        TransportType conn_type;
-
-        // The socket we're using for this connection.
-        int sockfd = -1;
-        
-        // Our address for this connection.
-        struct sockaddr our_address;
-        // Other side's address.
-        struct sockaddr their_address;
-        
-        // Not strictly necessary to keep track of the conn_id here,
-        // but may make things easier to debug/check.
-        long int conn_id;
-        
-        bool blocked();
-        bool nextEvent(std::shared_ptr<Event>& e);
-
-        // For printing/logging only.
-        std::string dstAddr();
-
-    private:
-        bool outstandingEvent = false;
-        bool waitingToSend = false;
-        int waitingToRecv = 0;
-        EventQueue* events;
-};
-*/
-
 class EventHandler {
     private:
         /* We start 3 threads */
@@ -100,7 +62,8 @@ class EventHandler {
         std::unordered_map<long int, EventHeap*>* connToEventQueue;
 	std::unordered_map<long int, long int>* connTime;
 	std::unordered_map<std::string, long int>* listenerTime;
-        
+	std::unordered_map<long int, struct stats>* connStats;
+	
         EventHeap waitHeap;
 
         void processAcceptEvents(long int);        
@@ -111,9 +74,11 @@ class EventHandler {
         void newConnectionUpdate(int sockfd, long int connID, long int planned, long int now);
 	void connectionUpdate(long int connID, long int planned, long int now);
 	long int acceptNewConnection(struct epoll_event *poll_e, long int now);
-	void getNewEvents(long int conn_id);	
+	void getNewEvents(long int conn_id);
+	bool DEBUG = 0;
+	
     public:
-        EventHandler(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq);
+        EventHandler(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq, std::unordered_map<long int, struct stats>* cs, bool debug);
         ~EventHandler();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

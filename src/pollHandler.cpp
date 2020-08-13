@@ -1,7 +1,8 @@
 #include "pollHandler.h"
 
-PollHandler::PollHandler() {  
+PollHandler::PollHandler(bool debug) {  
   /* Get our epoll fd. */
+  DEBUG = debug;
   epollfd = epoll_create1(0);
   if(epollfd == -1) { 	 
     throw std::runtime_error("Failure to create epoll.");

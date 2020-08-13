@@ -16,7 +16,6 @@
 #include <condition_variable>
 #include "connections.h"
 
-#define DEBUG 0
 
 /* Mutexes and condition variables. */
 extern std::mutex fileHandlerMTX;
@@ -29,6 +28,8 @@ bool returnLoadMoreFileEvents();
 #define SRV_UPSTART 2000
 
 extern std::atomic<bool> isRunning;
+extern std::atomic<bool> isInitd;
+extern std::atomic<int> numThreads;
 
 static std::string EventNames[14] = {"ACCEPT","ACCEPTED", "CONNECT", "CONNECTED", "CLOSE", "RECV", "RECVD", "WAIT", "SEND", "SENT", "SRV_START", "SRV_STARTED", "SRV_END", "NONE"};
 
@@ -58,6 +59,8 @@ enum DomainType {
     IPV4,
     IPV6
 };
+
+  
 
 class Event {
     public:

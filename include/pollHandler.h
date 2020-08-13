@@ -20,9 +20,10 @@ class PollHandler {
     int eventIndex = 0;    
     int currentEventCount = 0;
     void watch(int fd, epollWatchType type);
+    bool DEBUG = false;
     
   public:
-    PollHandler();
+    PollHandler(bool debug);
     ~PollHandler();
     void watchForRead(int fd);
     void watchForWrite(int fd);

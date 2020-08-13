@@ -63,8 +63,8 @@ std::string getConnString(const struct sockaddr_in* src, const struct sockaddr_i
 
     stringStream << srcStr << ":" << sport << "," << dstStr << ":" << dport;
 
-    if (DEBUG)
-      std::cout << "String stream: " << stringStream.str() << std::endl;
+    //if (DEBUG)
+    //std::cout << "String stream: " << stringStream.str() << std::endl;
 
     return stringStream.str();
     return "";

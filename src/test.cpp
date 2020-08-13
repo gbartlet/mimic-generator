@@ -3,15 +3,20 @@
 #include <string>
 #include <thread>
 #include <unistd.h>
+#include <signal.h>
+
 #include "mimic.h"
 #include "eventQueue.h"
 #include "eventHandler.h"
 #include "fileWorker.h"
 #include "serverWorker.h"
 #include "connections.h"
+
 #define START_PORT 5000
 
 std::atomic<bool> isRunning = false;
+std::atomic<bool> isInitd = false;
+std::atomic<int> numThreads = 1;
 std::mutex fileHandlerMTX;
 std::condition_variable fileHandlerCV;
 bool loadMoreFileEvents = true;
@@ -187,9 +192,30 @@ void connectionHandlerThread(int numConns, EventQueue* eq) {
     std::cout << "Read/write thread quitting." << std::endl;     
 }
 
+std::unordered_map<long int, struct stats> connStats;
+
+void print_stats()
+{
+  for (auto it=connStats.begin(); it != connStats.end(); it++)
+    {
+      std::cout<<"Conn "<<it->first<<" state "<<it->second.state<<" total events "<<it->second.total_events<<" last event "<<it->second.last_completed<<" delay "<<it->second.delay<<std::endl;
+    }
+}
+
+
+// Define the function to be called when ctrl-c (SIGINT) is sent to process
+void signal_callback_handler(int signum) {
+  std::cout << "Caught signal " << signum << std::endl;
+   // Terminate program
+   print_stats();
+   exit(signum);
+}
+
 int main(int argc, char* argv[]) {
+
+    signal(SIGINT, signal_callback_handler);
+  
     std::string serverIP = "10.1.1.2";
-    int numThreads = 1;
     int numConns = 1000;
     bool isServer = false;
     bool roleFlag = false;
@@ -198,18 +224,20 @@ int main(int argc, char* argv[]) {
     std::string connFile = "";
     
     std::string eventFile = "";
+
+    bool DEBUG = false;
     
     for(int i=1; i<argc; ++i) {
       std::string arg = argv[i];
         
         /* We have an option. */
       if((arg.starts_with("-"))) {
-            if(i+1 < argc) {
+            if(true) {
                 if((arg == "-t")) {
                     try {
                         if(arg == "-t") {
-                            numThreads = std::stoi(argv[i+1]);
-                            i++;
+			  numThreads.store(std::stoi(argv[i+1]));
+			  i++;
                         }
                     }
                     catch(std::invalid_argument& e) {
@@ -224,6 +252,9 @@ int main(int argc, char* argv[]) {
                 else if(arg == "-i") {
                     ipFile = argv[i+1];
                     i++;
+                }
+		else if(arg == "-d") {
+		  DEBUG = true;
                 }
                 else if(arg == "-c") {
                     connFile = argv[i+1];
@@ -265,9 +296,9 @@ int main(int argc, char* argv[]) {
     // Event notifier & poll for FileWorker.
     int notifierFD = createEventFD();
     EventNotifier* loadMoreNotifier = new EventNotifier(notifierFD, "Test file notifier.");
-    EventQueue** fileQ = (EventQueue**) malloc(numThreads*sizeof(EventQueue*));
+    EventQueue** fileQ = (EventQueue**) malloc(numThreads.load()*sizeof(EventQueue*));
     
-    for (int i = 0; i< numThreads; i++)
+    for (int i = 0; i< numThreads.load(); i++)
       fileQ[i] = new EventQueue("File events.");
     
 
@@ -283,7 +314,7 @@ int main(int argc, char* argv[]) {
     EventQueue * sendQ = new EventQueue("Send events.");
     std::unordered_map<long int, EventHeap*> c2eq;
     std::unordered_map<long int, EventHeap*> c2eq2;
-
+    
     std::cout<<"Conn file "<<connFile<<" event file "<<eventFile<<std::endl;
     //std::string ipFile = "/users/gbartlet/mimic-generator/testFiles/b-ips.txt";
     //connFile = "testconn.csv";
@@ -296,18 +327,39 @@ int main(int argc, char* argv[]) {
     std::unordered_map<long int, long int> c2time;
     std::unordered_map<std::string, long int> l2time;
     
-    FileWorker* fw = new FileWorker(&c2time, &l2time, fileQ, acceptQ, &c2eq, ipFile, eFiles, numThreads, true);
+    FileWorker* fw = new FileWorker(&c2time, &l2time, fileQ, acceptQ, &c2eq, ipFile, eFiles, &connStats, numThreads.load(), DEBUG, true);
     fw->startup();
     ConnectionPairMap * ConnIDtoConnectionPairMap = fw->getConnectionPairMap();
     //FileWorker* fw2 = new FileWorker(loadMoreNotifier, fileQ2, acceptQ, &c2eq2, ipFile, connFile2, eFiles2);
     //fw2->startup();
     //ConnectionPairMap * ConnIDtoConnectionPairMap2 = fw2->getConnectionPairMap();
+    // Start only file worker
+    isRunning.store(true);
+    std::chrono::high_resolution_clock::time_point fstartPoint = std::chrono::high_resolution_clock::now();
+    /* File worker. */
+    std::thread fileWorkerThread(&FileWorker::loop, fw, fstartPoint);
 
-    EventHandler** eh = (EventHandler**)malloc(numThreads*sizeof(EventHandler*));
-    
-    for (int i=0;i<numThreads;i++)
+    // Wait while initial load is done
+    while(isInitd.load() == false)
       {
-	eh[i] = new EventHandler(&c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq);
+	sleep(1);
+      }
+    // Check how many file queues are empty and drop that many threads
+    int n = numThreads.load();
+    for (int i=0;i<numThreads.load();i++)
+      {
+	std::cout<<"Queue "<<i<<" length "<<fileQ[i]->getLength()<<std::endl;
+	      
+	if (fileQ[i]->getLength() == 1)
+	  n--;
+      }
+    numThreads.store(n);
+    std::cout<<"Final num threads "<<numThreads.load()<<std::endl;
+    EventHandler** eh = (EventHandler**)malloc(numThreads.load()*sizeof(EventHandler*));
+    
+    for (int i=0;i<numThreads.load();i++)
+      {
+	eh[i] = new EventHandler(&c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq, &connStats, DEBUG);
 	eh[i]->startup();
       }
     //EventHandler* eh2 = new EventHandler(loadMoreNotifier, fileQ2, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap2, &c2eq2);
@@ -316,21 +368,21 @@ int main(int argc, char* argv[]) {
     //ServerWorker* sw = new ServerWorker(serverQ, acceptQ);
     //sw->startup(ConnIDtoConnectionPairMap);
     
-    isRunning.store(true);    
+    //isRunning.store(true);    
     
-    // Start all our threads.
+    // Start rest of our threads.
     std::chrono::high_resolution_clock::time_point startPoint = std::chrono::high_resolution_clock::now();
     /* File worker. */
-    std::thread fileWorkerThread(&FileWorker::loop, fw, startPoint);
+    //std::thread fileWorkerThread(&FileWorker::loop, fw, startPoint);
     //std::thread fileWorkerThread2(&FileWorker::loop, fw2, startPoint);
     
     /* Server Woker. */
     //std::thread serverWorkerThread(&ServerWorker::loop, sw, startPoint);                     
         
     /* Event Handler. */
-    std::thread** eventHandlerThread = (std::thread**)malloc(numThreads*sizeof(std::thread*));
+    std::thread** eventHandlerThread = (std::thread**)malloc(numThreads.load()*sizeof(std::thread*));
 
-    for (int i=0; i<numThreads; i++)
+    for (int i=0; i<numThreads.load(); i++)
       {
 	eventHandlerThread[i] = new std::thread(&EventHandler::loop, eh[i], startPoint);
       }
@@ -341,7 +393,7 @@ int main(int argc, char* argv[]) {
     isRunning.store(false);
     fileWorkerThread.join();
     
-    for (int i=0; i<numThreads; i++)
+    for (int i=0; i<numThreads.load(); i++)
       eventHandlerThread[i]->join();
 
     EventQueue* eq = new EventQueue();
@@ -399,24 +451,4 @@ int main(int argc, char* argv[]) {
     exit(1);
 
     */
-    int connsPerThread = int(numConns/numThreads);
-    if(isServer) std::cout << "Running as server (binding to " << serverIP << ") ";
-    else std::cout << "Running as client (connecting to " << serverIP << ") ";
-    std::cout << numThreads << " threads. " << numConns << " connections. " << std::endl;
-    std::cout << "Running " << connsPerThread << " connections per thread." << std::endl;
-
-    isRunning.store(true);
-    if(isServer) {
-        EventQueue* eq = new EventQueue();
-        std::thread serverThread(serverSocketsThread,serverIP, numConns, eq);
-        std::thread connThread(connectionHandlerThread,numConns, eq);
-        //serverThread.detach();
-        //connThread.detach();
-        usleep(1000000 * 60);
-        std::cout << "Timing out and quitting." << std::endl;
-        isRunning.store(false);
-        serverThread.join();
-        connThread.join();
-    }
-
 }

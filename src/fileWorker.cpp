@@ -4,17 +4,19 @@
 #include "mimic.h"
 
 
-FileWorker::FileWorker(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, int nt, bool useMMapFlag) {
+FileWorker::FileWorker(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, std::unordered_map<long int, struct stats>* cs, int nt, bool debug, bool useMMapFlag) {
   
     fileEventsAddedCount = 0;
     useMMap = useMMapFlag;
     ConnectionEQ = c2eq;
     connTime = c2time;
     listenerTime = l2time;
-    numThreads = nt;
+    //numThreads = nt;
+    connStats = cs;
+    DEBUG = debug;
     
     /* Deal with our notifier where the EventHandler can prompt us to load more events. */
-    loadEventsPollHandler = new PollHandler();
+    loadEventsPollHandler = new PollHandler(DEBUG);
     //loadEventsPollHandler->watchForRead(loadMoreNotifier->myFD());
     
     /* Get a shortterm heap so we can internally reorder connection start/stop events with events from event files. */
@@ -169,6 +171,7 @@ bool FileWorker::isMyConnID(long int connID) {
 }
 
 void FileWorker::loadEvents() {
+    
   if (DEBUG)
     std::cout << "Loading events." << std::endl;
 
@@ -251,9 +254,11 @@ void FileWorker::loadEvents() {
 		  std::cout<<"Adding connect event for conn "<<e.conn_id<<"\n";
 		(*ConnectionEQ)[e.conn_id] = new EventHeap();
 		shortTermHeap->addEvent(e);
+		(*connStats)[e.conn_id].total_events = 1;
 	      }
 	      else {
                 /* XXX Have we started a server for this IP:port yet? If not, add event. */
+		(*connStats)[e.conn_id].total_events = 1;
 		if (DEBUG)
 		  std::cout<<"Server string "<<servString<<std::endl;
 		e.serverString = servString;
@@ -290,12 +295,11 @@ void FileWorker::loadEvents() {
 	      e.value = std::stoi(eventData[i][5].c_str()); 
 	      e.ms_from_last_event = (long int)(std::stod(eventData[i][6].c_str()) * 1000);
 	      e.ms_from_start = (long int)(std::stod(eventData[i][7].c_str()) * 1000) + loopedCount * loopDuration;
-	      
-	      /* Type of event - send and recieve. */
-	      if (DEBUG)
-		std::cout<<"Check ip "<<eventData[i][3]<<" type "<<eventData[i][3]<<std::endl;
+	      /* Type of event - send and receive. */
 	      if(isMyIP(eventData[i][3])) {
 		//std::cout<<"My ip\n";
+		(*connStats)[e.conn_id].total_events++;
+
 		if(eventData[i][4].compare("SEND")==0) e.type = SEND;
 		else e.type = RECV;
 		//std::cout<<"Data type "<<e.type<<std::endl;
@@ -381,6 +385,7 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
     if (DEBUG)
       std::cout<<"FW looping heap has "<<shortTermHeap->getLength()<<" events\n";
     shortTermHeap->print();
+
     while(isRunning.load()) {
         nextET = shortTermHeap->nextEventTime();
 	if (DEBUG)
@@ -393,9 +398,9 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	    std::cout << "Adding event with time: " << shortTermHeap->nextEventTime() << " time of last event added " << lastEventTime <<  std::endl;
 	  std::shared_ptr<Event> e_shr = std::make_shared<Event>(e);
 	  outEvents[currentThread]->addEvent(e_shr);
-	  currentThread ++;
+       	  currentThread ++;
 	  // Round robin assignment to queues
-	  if (currentThread == numThreads)
+	  if (currentThread == numThreads.load())
 	    currentThread = 0;
 	  e_shr.reset();
 	  fileEventsAddedCount++;
@@ -405,7 +410,10 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	  }
 	  nextET = shortTermHeap->nextEventTime();
         }
-        
+
+	if (isInitd.load() == false)
+	  isInitd.store(true);
+	
         /* Maybe we should give it a rest for a bit. */
         loadEventsPollHandler->waitForEvents();
         

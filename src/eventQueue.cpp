@@ -57,8 +57,8 @@ EventQueue::EventQueue(std::string name) {
             while(first != divider.load()) {
                 eventJob * tmp = first;
                 first = first->next;
-		if (DEBUG)
-		  std::cout << "Use count of epointer before removal of job" << tmp->eptr.use_count() << "\n";
+		//if (DEBUG)
+		//std::cout << "Use count of epointer before removal of job" << tmp->eptr.use_count() << "\n";
                 tmp->eptr.reset();
                 delete tmp; 
                 numEvents--;
@@ -77,8 +77,8 @@ EventQueue::EventQueue(std::string name) {
             last.store(lastNode->next);
             numEvents++;
             cleanUp();
-	    if (DEBUG)
-	      std::cout << qName << ":Num events: " << numEvents << "\n";
+	    //if (DEBUG)
+	    //std::cout << qName << ":Num events: " << numEvents << "\n";
         }
         
         
@@ -91,8 +91,8 @@ EventQueue::EventQueue(std::string name) {
                     job = dividerNode->next->eptr;
                     //divider = divider->next;
                     divider.store(dividerNode->next);
-		    if (DEBUG)
-		      std::cout << qName << "JOB REMOVED" << std::endl;
+		    //if (DEBUG)
+		    //std::cout << qName << "JOB REMOVED" << std::endl;
                     return true;
                 }
             }

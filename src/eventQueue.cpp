@@ -7,7 +7,8 @@
 #include <sstream>
 #include <fcntl.h>
 #include <vector>
-#include <queue> 
+#include <queue>
+#include <fstream> 
 #include <unordered_map>
 #include "eventQueue.h"
 #include "mimic.h"
@@ -137,6 +138,19 @@ Event EventHeap::nextEvent() {
 
 int EventHeap::getLength() {
   return eventHeap.size();
+}
+
+void EventHeap::printToFile(std::ofstream &myFile)
+{
+   jobHeap temp;
+   while(!eventHeap.empty()) {
+     Event e = eventHeap.top();
+     eventHeap.pop();
+     myFile<<e.conn_id<<":"<<e.event_id<<":"<<EventNames[e.type]<<":"<<e.ms_from_start<<" ";
+     temp.push(e);
+   }
+   myFile << '\n';
+   eventHeap = temp;
 }
 
 void EventHeap::print() {

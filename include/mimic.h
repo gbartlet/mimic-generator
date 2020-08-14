@@ -23,7 +23,7 @@ extern std::condition_variable fileHandlerCV;
 extern bool loadMoreFileEvents;
 bool returnLoadMoreFileEvents();
 
-#define maxQueuedFileEvents 100000000
+#define maxQueuedFileEvents 100
 
 #define SRV_UPSTART 2000
 

@@ -65,6 +65,7 @@ class EventHeap {
         long int nextEventTime();
 	int getLength();
 	void print();
+	void printToFile(std::ofstream&);
         Event nextEvent();
 };
 

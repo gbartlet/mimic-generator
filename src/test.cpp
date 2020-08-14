@@ -315,9 +315,10 @@ int main(int argc, char* argv[]) {
     EventQueue** fileQ = (EventQueue**) malloc(numThreads.load()*sizeof(EventQueue*));
     
     for (int i = 0; i< numThreads.load(); i++)
-      fileQ[i] = new EventQueue("File events.");
+      {
+	fileQ[i] = new EventQueue("File events.");
+      }
     
-
     notifierFD = createEventFD();
     EventNotifier * acceptNotifier = new EventNotifier(notifierFD, "Test accept notifier.");
     EventQueue * acceptQ = new EventQueue("Accept events");
@@ -328,8 +329,6 @@ int main(int argc, char* argv[]) {
     EventQueue * sentQ = new EventQueue("Sent events");
     EventQueue * serverQ = new EventQueue("Sever start/stop events");
     EventQueue * sendQ = new EventQueue("Send events.");
-    std::unordered_map<long int, EventHeap*> c2eq;
-    std::unordered_map<long int, EventHeap*> c2eq2;
     
     std::cout<<"Conn file "<<connFile<<" event file "<<eventFile<<std::endl;
     //std::string ipFile = "/users/gbartlet/mimic-generator/testFiles/b-ips.txt";
@@ -343,7 +342,7 @@ int main(int argc, char* argv[]) {
     std::unordered_map<long int, long int> c2time;
     std::unordered_map<std::string, long int> l2time;
     
-    FileWorker* fw = new FileWorker(&c2time, &l2time, fileQ, acceptQ, &c2eq, ipFile, eFiles, &connStats, numThreads.load(), DEBUG, true);
+    FileWorker* fw = new FileWorker(loadMoreNotifier, &c2time, &l2time, fileQ, acceptQ, ipFile, eFiles, &connStats, numThreads.load(), DEBUG, true);
     fw->startup();
     ConnectionPairMap * ConnIDtoConnectionPairMap = fw->getConnectionPairMap();
     //FileWorker* fw2 = new FileWorker(loadMoreNotifier, fileQ2, acceptQ, &c2eq2, ipFile, connFile2, eFiles2);
@@ -373,7 +372,7 @@ int main(int argc, char* argv[]) {
     
     for (int i=0;i<numThreads.load();i++)
       {
-	eh[i] = new EventHandler(&c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap, &c2eq, &connStats, DEBUG);
+	eh[i] = new EventHandler(loadMoreNotifier, &c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap,  &connStats, DEBUG);
 	eh[i]->startup();
       }
     //EventHandler* eh2 = new EventHandler(loadMoreNotifier, fileQ2, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap2, &c2eq2);

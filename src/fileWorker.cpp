@@ -4,20 +4,21 @@
 #include "mimic.h"
 
 
-FileWorker::FileWorker(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, std::unordered_map<long int, struct stats>* cs, int nt, bool debug, bool useMMapFlag) {
+FileWorker::FileWorker(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::string& ipFile, std::vector<std::string>& eFiles, std::unordered_map<long int, struct stats>* cs, int nt, bool debug, bool useMMapFlag) {
   
     fileEventsAddedCount = 0;
     useMMap = useMMapFlag;
-    ConnectionEQ = c2eq;
+
     connTime = c2time;
     listenerTime = l2time;
-    //numThreads = nt;
     connStats = cs;
-    DEBUG = debug;
+    //DEBUG = debug;
+    DEBUG = false;
     
     /* Deal with our notifier where the EventHandler can prompt us to load more events. */
+    loadEventsNotifier = loadMoreNotifier;
     loadEventsPollHandler = new PollHandler(DEBUG);
-    //loadEventsPollHandler->watchForRead(loadMoreNotifier->myFD());
+    loadEventsPollHandler->watchForRead(loadMoreNotifier->myFD());
     
     /* Get a shortterm heap so we can internally reorder connection start/stop events with events from event files. */
     shortTermHeap = new EventHeap();
@@ -144,14 +145,16 @@ std::vector <std::vector <std::string>> FileWorker::loadMMapFile(void * mmapData
 	  std::cerr << "ERROR: Not enough fields in line to process: " <<record.size()  << std::endl;
         }
         i = i + 1;
-        if(i >= numRecords && !noLimit) break;
+        //if(i >= numRecords && !noLimit) break;
+	//if (!noLimit)
+	//break;
 
         if(end != buff_end) {
             begin = end+1;
         }
         else break;
     }
-    //std::cout<<"Loaded "<<i<<" records\n";
+    std::cout<<"Loaded "<<i<<" records\n";
     return data;
 }
 
@@ -172,47 +175,66 @@ bool FileWorker::isMyConnID(long int connID) {
 
 void FileWorker::loadEvents() {
     
-  if (DEBUG)
-    std::cout << "Loading events." << std::endl;
+  //if (DEBUG)
+  std::cout << "Loading events, last line " <<lastLine<<std::endl;
 
     int currentThread = 0;
 
     int eventsProduced = 0;
     int eventsToGet = maxQueuedFileEvents;
-    
-    std::vector <std::vector <std::string>> eventData; 
-    if(useMMap) {
-        if (DEBUG)
-	  std::cout << "Using MMAP" << std::endl;
-        eventData = loadMMapFile(*mmappedFilesItr, 8, eventsToGet);
-    }
-    else {
-        //std::vector <std::vector <std::string>> eventData = loadFile(currentEventIFStream, 8, eventsToGet);
-        eventData = loadFile(*eventIFStreamsItr, 8, eventsToGet);
-    }
-    
-    /* We've probably reached the end of the file. */
-    eventIFStreamsItr++;
-    mmappedFilesItr++;
-    if(eventIFStreamsItr >= eventsIFStreams.end() || mmappedFilesItr >= mmapedFiles.end()) {
-      for(eventIFStreamsItr = eventsIFStreams.begin(); eventIFStreamsItr != eventsIFStreams.end(); ++eventIFStreamsItr) {
-	(*eventIFStreamsItr)->clear();
-	(*eventIFStreamsItr)->seekg(0, std::ios::beg);
+
+    // If we're done get out
+    if (isProcessed)
+      {
+	std::cerr<<"Done processing\n";
+	return;
       }
-      eventIFStreamsItr = eventsIFStreams.begin();
-      mmappedFilesItr = mmapedFiles.begin();
-      if(loopedCount == 0) {
-	/* This is the first time we've looped, record the duration. */
-	loopDuration = lastEventTime;
+    // We're starting a new file
+    if (lastLine == 0)
+      {
+	if(useMMap) {
+	  if (DEBUG)
+	    std::cout << "Using MMAP" << std::endl;
+	  eventData = loadMMapFile(*mmappedFilesItr, 8, eventsToGet);
+	}
+	else {
+	  //std::vector <std::vector <std::string>> eventData = loadFile(currentEventIFStream, 8, eventsToGet);
+	  eventData = loadFile(*eventIFStreamsItr, 8, eventsToGet);
+	}
+	
+	/* We've probably reached the end of the file. */
+	// Jelena switch to new file
+	eventIFStreamsItr++;
+	mmappedFilesItr++;
+
+	if(eventIFStreamsItr >= eventsIFStreams.end() || mmappedFilesItr >= mmapedFiles.end()) {
+	  std::cerr<<"Reached the end, looping to beginning, isDone is true\n";
+	  isDone = true;
+	  if (false) // Jelena
+	    {
+	      for(eventIFStreamsItr = eventsIFStreams.begin(); eventIFStreamsItr != eventsIFStreams.end(); ++eventIFStreamsItr) {
+		(*eventIFStreamsItr)->clear();
+		(*eventIFStreamsItr)->seekg(0, std::ios::beg);
+	      }
+	      eventIFStreamsItr = eventsIFStreams.begin();
+	      mmappedFilesItr = mmapedFiles.begin();
+	      if(loopedCount == 0) {
+		/* This is the first time we've looped, record the duration. */
+		loopDuration = lastEventTime;
+	      }
+	      loopedCount = loopedCount + 1;
+	    }
+	}
       }
-      loopedCount = loopedCount + 1;
+    std::vector<int>::size_type i = lastLine;
+    std::cerr<<"Event data size "<<eventData.size()<<std::endl;
       
-      for(std::vector<int>::size_type i = 0; i != eventData.size(); i++) {
-	// Check if this is CONN record or event record
-	if (eventData[i][0] == "CONN")
-	  {
-	    long int connID;
-	    try {
+    for(;i != eventData.size(); i++) {
+      // Check if this is CONN record or event record
+      if (eventData[i][0] == "CONN")
+	{
+	  long int connID;
+	  try {
 	      connID = std::stol(eventData[i][2].c_str());
 	    }
 	    catch(...){
@@ -252,7 +274,7 @@ void FileWorker::loadEvents() {
                 e.type = CONNECT;
 		if (DEBUG)
 		  std::cout<<"Adding connect event for conn "<<e.conn_id<<"\n";
-		(*ConnectionEQ)[e.conn_id] = new EventHeap();
+
 		shortTermHeap->addEvent(e);
 		(*connStats)[e.conn_id].total_events = 1;
 	      }
@@ -278,7 +300,6 @@ void FileWorker::loadEvents() {
 		    if (DEBUG)
 		      std::cout<<"Changed listener time for "<<servString<<" to "<<(*listenerTime)[servString]<<std::endl;
 		  }
-		(*ConnectionEQ)[e.conn_id] = new EventHeap();
 	      }
 	    }
 	    src.clear();
@@ -309,45 +330,66 @@ void FileWorker::loadEvents() {
 		//}
 		//std::cout << "Have event with time of " << e.ms_from_start << std::endl;
 		
-		if (DEBUG)
-		  std::cout<<"Event for conn "<<e.conn_id<<" event id "<<e.event_id<<" type "<<EventNames[e.type]<<" value "<<e.value<<" time "<<e.ms_from_start<<std::endl;
-		(*ConnectionEQ)[e.conn_id]->addEvent(e);
+		//if (DEBUG)
+		  std::cerr<<"Event for conn "<<e.conn_id<<" event id "<<e.event_id<<" type "<<EventNames[e.type]<<" value "<<e.value<<" time "<<e.ms_from_start<<std::endl;
+
 		(*connTime)[e.conn_id] = e.ms_from_start;
-		//shortTermHeap->addEvent(e);
+		shortTermHeap->addEvent(e);
 		eventsProduced = eventsProduced + 1;
 	      }
 	      lastEventTime = std::stod(eventData[i][7].c_str()) * 1000 + loopedCount * loopDuration;
 	      if (DEBUG)
 		std::cout<<"Lastevent "<<lastEventTime<<std::endl;
+	      if (eventsProduced >= eventsToGet)
+		{
+		  lastLine = i;
+		  std::cerr<<"Last line is "<<lastLine<<" eventsProduced "<<eventsProduced<<std::endl;
+		  break;
+		}
 	      //if (t > lastEventTime)
 	      //lastEventTime = t;
 	    }
 	  }
-      }
     }
-      if (DEBUG)
-	std::cout<<"Last event time is "<<lastEventTime<<std::endl;
-    // Now go through times when server should end and add those
-    for(auto it = listenerTime->begin(); it != listenerTime->end(); it++)
+    if  (i == eventData.size())
       {
-	Event e;
-	e.serverString = it->first;
-	e.conn_id = -1;
-	e.event_id = -1;
-	e.value = -1;
-	e.ms_from_start = it->second;
-	e.ms_from_last_event = 0;
-	e.type = SRV_END;
-	shortTermHeap->addEvent(e);
-	//if (e.ms_from_start > lastEventTime)
-	//lastEventTime = e.ms_from_start;
-	if (DEBUG)
-	std::cout<<"Created srv end job for "<<e.serverString<<" at time "<<e.ms_from_start<<std::endl;
+	if (!isDone)
+	  {
+	    lastLine = 0;
+	    std::cerr<<"lastLine is "<<eventData.size()<<" is Done "<<isDone<<std::endl;
+	  }
+	else
+	  {
+	    isProcessed = true;
+	  }
+      }
+    
+    if (DEBUG)
+      std::cout<<"Last event time is "<<lastEventTime<<std::endl;
+    if (false) // Jelena
+      {
+	// Now go through times when server should end and add those
+	for(auto it = listenerTime->begin(); it != listenerTime->end(); it++)
+	  {
+	    Event e;
+	    e.serverString = it->first;
+	    e.conn_id = -1;
+	    e.event_id = -1;
+	    e.value = -1;
+	    e.ms_from_start = it->second;
+	    e.ms_from_last_event = 0;
+	    e.type = SRV_END;
+	    shortTermHeap->addEvent(e);
+	    //if (e.ms_from_start > lastEventTime)
+	    //lastEventTime = e.ms_from_start;
+	    if (DEBUG)
+	      std::cout<<"Created srv end job for "<<e.serverString<<" at time "<<e.ms_from_start<<std::endl;
+	  }
       }
     if (DEBUG)
       std::cout << "Loaded " << eventsProduced << " events from file"<<std::endl;
-    //shortTermHeap->print();
-}
+    shortTermHeap->print();
+      }
 
 bool FileWorker::startup() {
     if (DEBUG)
@@ -419,10 +461,10 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
         
         struct epoll_event e;
         if(isRunning.load() && loadEventsPollHandler->nextEvent(&e)) {
-	  if (DEBUG)
+	  //if (DEBUG)
             std::cout << "Got notification to load more events." << std::endl;
             while(loadEventsPollHandler->nextEvent(&e)) {
-	      if (DEBUG)
+	      //  if (DEBUG)
                 std::cout << "Got load notification from loadEventsNotifier." << std::endl;
                 loadEventsNotifier->readSignal();
             }

@@ -44,7 +44,9 @@ class FileWorker {
         bool isMyIP(std::string IP);
         bool isMyConnID(long int connID);
         void loadEvents();
-
+	bool isDone = false;
+	bool isProcessed = false;
+	
         std::unordered_set<std::string> myIPs;
         std::unordered_set<long int> myConnIDs;
         std::unordered_map<long int, long int> connIDToLastEventTimeMap;
@@ -64,7 +66,10 @@ class FileWorker {
         std::vector<void *> mmapedFiles;
         std::vector<void *>::iterator mmappedFilesItr;
         std::unordered_map<void *, int> mmapToSize;
-        
+
+	/* last line we read */
+	unsigned long int lastLine = 0;
+	
         std::string connectionFile;
         std::string IPListFile;
         std::string trim(const std::string& str, const std::string& whitespace = " \t");
@@ -72,7 +77,7 @@ class FileWorker {
         long int loopDuration = 0;
         long int loopEventCount = 0;
         long int lastEventTime = 0;
-        std::unordered_map<long int, EventHeap*>* ConnectionEQ = 0;
+
 	std::unordered_map<long int, long int>* connTime = 0;
 	std::unordered_map<std::string, long int>* listenerTime = 0;
 	std::unordered_map<long int, struct stats>* connStats;
@@ -81,8 +86,11 @@ class FileWorker {
 
 	bool DEBUG=false;
 
+	std::vector <std::vector <std::string>> eventData; 
+
+
     public:
-        FileWorker(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::unordered_map<long int, EventHeap*>* c2eq, std::string& ipFile, std::vector<std::string>& eFiles, std::unordered_map<long int, struct stats>* cs, int nt, bool debug,  bool useMMap=true);
+        FileWorker(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::string& ipFile, std::vector<std::string>& eFiles, std::unordered_map<long int, struct stats>* cs, int nt, bool debug,  bool useMMap=true);
         ~FileWorker();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

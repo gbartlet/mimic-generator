@@ -59,7 +59,8 @@ class EventHandler {
 	std::unordered_map<long int, long int> connToLastPlannedEvent;
 	std::unordered_map<long int, conn_state> connState;
         std::unordered_map<long int, long int> connToLastCompletedEvent;
-        std::unordered_map<long int, EventHeap*>* connToEventQueue;
+        std::unordered_map<long int, EventHeap> connToEventQueue;
+	std::unordered_map<long int, bool> connToStalled;
 	std::unordered_map<long int, long int>* connTime;
 	std::unordered_map<std::string, long int>* listenerTime;
 	std::unordered_map<long int, struct stats>* connStats;
@@ -75,10 +76,11 @@ class EventHandler {
 	void connectionUpdate(long int connID, long int planned, long int now);
 	long int acceptNewConnection(struct epoll_event *poll_e, long int now);
 	void getNewEvents(long int conn_id);
+	void checkStalledConns(long int now);
 	bool DEBUG = 0;
 	
     public:
-        EventHandler(std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, EventHeap*>* c2eq, std::unordered_map<long int, struct stats>* cs, bool debug);
+        EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, bool debug);
         ~EventHandler();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

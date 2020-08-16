@@ -14,6 +14,9 @@ FileWorker::FileWorker(EventNotifier* loadMoreNotifier, std::unordered_map<long 
     connStats = cs;
     //DEBUG = debug;
     DEBUG = false;
+
+    threadToEventCount = {};
+    threadToConnCount = {};
     
     /* Deal with our notifier where the EventHandler can prompt us to load more events. */
     loadEventsNotifier = loadMoreNotifier;
@@ -283,6 +286,7 @@ void FileWorker::loadEvents() {
 		(*connStats)[e.conn_id].total_events = 1;
 		if (DEBUG)
 		  std::cout<<"Server string "<<servString<<std::endl;
+		// Jelena - should do this later when deciding on threads
 		e.serverString = servString;
 		e.ms_from_start = std::max((long int)(std::stod(eventData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
 		if (listenerTime->find(servString) == listenerTime->end())
@@ -322,7 +326,8 @@ void FileWorker::loadEvents() {
 		(*connStats)[e.conn_id].total_events++;
 
 		if(eventData[i][4].compare("SEND")==0) e.type = SEND;
-		else e.type = RECV;
+		else if (eventData[i][4].compare("WAIT")==0) e.type = RECV;
+		else if (eventData[i][4].compare("CLOSE")==0) e.type = CLOSE;
 		//std::cout<<"Data type "<<e.type<<std::endl;
 		//else {
 		//    if(eventData[i][3].compare("SEND")==0) e.type = RECV;
@@ -439,11 +444,25 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	  if (DEBUG)
 	    std::cout << "Adding event with time: " << shortTermHeap->nextEventTime() << " time of last event added " << lastEventTime <<  std::endl;
 	  std::shared_ptr<Event> e_shr = std::make_shared<Event>(e);
-	  outEvents[currentThread]->addEvent(e_shr);
-       	  currentThread ++;
-	  // Round robin assignment to queues
-	  if (currentThread == numThreads.load())
-	    currentThread = 0;
+	  int t;
+	  if (connIDToThread.find(e.conn_id) != connIDToThread.end())
+	    {
+	      t = connIDToThread[e.conn_id];
+	    }
+	  else
+	    {
+	      // Check if this connection is for existing
+	      // server string. Jelena
+	      t = currentThread++;
+	      connIDToThread[e.conn_id] = t;
+	      threadToConnCount(t)++;
+	      // Round robin assignment to queues
+	      if (currentThread == numThreads.load())
+		currentThread = 0;
+	    }
+	  outEvents[t]->addEvent(e_shr);
+	  threadToEventCount[t]++;
+	         	  
 	  e_shr.reset();
 	  fileEventsAddedCount++;
 	  if(fileEventsAddedCount > maxQueuedFileEvents) {

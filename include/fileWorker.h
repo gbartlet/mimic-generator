@@ -51,6 +51,10 @@ class FileWorker {
         std::unordered_set<long int> myConnIDs;
         std::unordered_map<long int, long int> connIDToLastEventTimeMap;
         std::unordered_map<std::string, bool> srvStringToStartBoolMap;
+	std::unordered_map<long int, int> connIDToThread;
+	std::unordered_map<long int, int> threadToEventCount;
+	std::unordered_map<long int, int> threadToConnCount;
+	
         EventHeap * shortTermHeap;
         
         /* Event filenames. */

@@ -23,11 +23,11 @@ extern std::condition_variable fileHandlerCV;
 extern bool loadMoreFileEvents;
 bool returnLoadMoreFileEvents();
 
-#define maxQueuedFileEvents 1000
+#define maxQueuedFileEvents 1000000
 
 #define SRV_UPSTART 2000
 
-#define SHORTLEN 50
+#define SHORTLEN 150
 #define MEDLEN 255
 
 extern std::atomic<bool> isRunning;

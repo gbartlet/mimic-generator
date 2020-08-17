@@ -370,9 +370,15 @@ int main(int argc, char* argv[]) {
     std::cout<<"Final num threads "<<numThreads.load()<<std::endl;
     EventHandler** eh = (EventHandler**)malloc(numThreads.load()*sizeof(EventHandler*));
     
+    char myName[SHORTLEN], filename[MEDLEN];
+    gethostname(myName, SHORTLEN);
+  
     for (int i=0;i<numThreads.load();i++)
       {
-	eh[i] = new EventHandler(loadMoreNotifier, &c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap,  &connStats, DEBUG);
+	sprintf(filename, "thread.%s.%d.txt", myName,i);
+	
+	eh[i] = new EventHandler(loadMoreNotifier, &c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap,  &connStats, DEBUG, filename);
+	
 	eh[i]->startup();
       }
     //EventHandler* eh2 = new EventHandler(loadMoreNotifier, fileQ2, acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap2, &c2eq2);
@@ -401,7 +407,7 @@ int main(int argc, char* argv[]) {
       }
     //std::thread eventHandlerThread2(&EventHandler::loop, eh2, startPoint);
     
-    usleep(10000000 * 10);
+    usleep(10000000 * 300);
     
     isRunning.store(false);
     fileWorkerThread.join();
@@ -418,25 +424,6 @@ int main(int argc, char* argv[]) {
 
 
 
-
-    // Testing server worker.
-    EventQueue * in = new EventQueue();
-    EventQueue * out = new EventQueue();
-    stringToConnIDMap map;
-
-    ServerWorker* sh = new ServerWorker(in, out);
-    
-    
-    isRunning.store(true);
-    std::thread serverThread(&ServerWorker::loop, sh, startPoint);
-    Event e;
-    e.ms_from_start = 20;
-    e.type = SRV_START;
-    in->addEvent(std::make_shared<Event>(e));
-    usleep(1000000 * 10);
-    isRunning.store(false);
-    serverThread.join();
-    exit(1);
 
     // test connection map.
     /*std::unordered_map<long int, connectionPair*> connIDToConnectionPairMap = {};

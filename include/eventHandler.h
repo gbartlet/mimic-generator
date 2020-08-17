@@ -44,7 +44,10 @@ class EventHandler {
         EventQueue* serverStartnStopReq;
         EventQueue* sendReq;
 	EventHeap* eventsToHandle;
-        
+
+	/* For logging */
+	std::ofstream* out;
+	
         /* Data management structures. */
         ConnectionPairMap * connIDToConnectionMap;
         stringToConnIDMap strToConnID;
@@ -80,7 +83,7 @@ class EventHandler {
 	bool DEBUG = 0;
 	
     public:
-        EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, bool debug);
+        EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, bool debug, std::string myname);
         ~EventHandler();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

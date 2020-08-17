@@ -43,7 +43,8 @@ class FileWorker {
         std::vector <std::vector <std::string>> loadMMapFile(void * mmapData, int numFields, int numRecords);
         bool isMyIP(std::string IP);
         bool isMyConnID(long int connID);
-        void loadEvents();
+        void loadEvents(int howmany);
+	int findMin();
 	bool isDone = false;
 	bool isProcessed = false;
 	
@@ -52,6 +53,8 @@ class FileWorker {
         std::unordered_map<long int, long int> connIDToLastEventTimeMap;
         std::unordered_map<std::string, bool> srvStringToStartBoolMap;
 	std::unordered_map<long int, int> connIDToThread;
+	std::unordered_map<long int, std::string> connIDToServString;
+	std::unordered_map<std::string, int> servStringToThread;
 	std::unordered_map<long int, int> threadToEventCount;
 	std::unordered_map<long int, int> threadToConnCount;
 	

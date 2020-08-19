@@ -70,7 +70,8 @@ class EventHandler {
 	
         EventHeap waitHeap;
 
-        void processAcceptEvents(long int);        
+        void processAcceptEvents(long int);
+	void storeConnections();        
         void processFileEvents();
         void addWait();
         bool readyForEvent(long int connID, long int delta, long int now);

@@ -236,20 +236,21 @@ void FileWorker::loadEvents(int eventsToGet) {
 	{
 	  long int connID;
 	  try {
-	      connID = std::stol(eventData[i][2].c_str());
+	      connID = std::stol(eventData[i][1].c_str());
 	    }
 	    catch(...){
 	      perror("Problem with connData line, continuing.");
 	      continue;
 	    }
-	    std::string src = trim(eventData[i][3]);
-	    int sport = std::stoi(eventData[i][4].c_str());
-	    std::string dst = trim(eventData[i][6]);
-	    int dport = std::stoi(eventData[i][7].c_str());
-	    char ports[10];
+	    std::string src = trim(eventData[i][2]);
+	    int sport = std::stoi(eventData[i][3].c_str());
+	    std::string dst = trim(eventData[i][5]);
+	    int dport = std::stoi(eventData[i][6].c_str());
+	    char ports[10], portd[10];
 	    sprintf(ports, "%d", dport);
+	    sprintf(portd, "%d", sport);
 	    std::string servString = dst + ":" + ports;
-	    
+	    std::string connString = src + ":" + portd;
 	    if (DEBUG)
 	      std::cout << "Check if IP '" << src << "' and '" << dst << "' are in my connections." << std::endl;
 	    if(isMyIP(src) || isMyIP(dst)) {
@@ -265,13 +266,14 @@ void FileWorker::loadEvents(int eventsToGet) {
 	      /* Add an event to start this connection. */
 	      Event e;
 	      e.serverString = servString;
+	      e.connString = connString;
 	      e.conn_id = connID;
 	      e.event_id = -1;
 	      e.value = -1;
 	      e.ms_from_start = 0;
 	      e.ms_from_last_event = 0;
 	      if(isMyIP(src)) {
-                e.ms_from_start = stod(eventData[i][1])*1000;
+                e.ms_from_start = stod(eventData[i][7])*1000;
                 e.type = CONNECT;
 		if (DEBUG)
 		  std::cout<<"Adding connect event for conn "<<e.conn_id<<"\n";
@@ -282,29 +284,16 @@ void FileWorker::loadEvents(int eventsToGet) {
 	      else {
                 /* XXX Have we started a server for this IP:port yet? If not, add event. */
 		(*connStats)[e.conn_id].total_events = 1;
-		e.ms_from_start =  std::max((long int)(std::stod(eventData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
+		e.ms_from_start =  std::max((long int)(std::stod(eventData[i][7].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
                 e.type = SRV_START;
 		if (DEBUG)
 		  std::cout<<"Server string "<<servString<<std::endl;
-		// Jelena - should do this later when deciding on threads
-		//e.serverString = servString;
-		//e.ms_from_start = std::max((long int)(std::stod(eventData[i][1].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
-		//if (listenerTime->find(servString) == listenerTime->end())
-		//{
-		    //  e.type = SRV_START;
-		    //(*listenerTime)[servString] = e.ms_from_start+2*SRV_UPSTART;
+
 		connIDToServString[e.conn_id] = servString;
 		shortTermHeap->addEvent(e);
 
 		if (DEBUG)
 		  std::cout<<"Adding server event START for server "<<e.serverString<<" for conn "<<e.conn_id<<"\n";
-		//}
-		//else if(e.ms_from_start > (*listenerTime)[servString] - 2*SRV_UPSTART)
-		//{
-		    //  (*listenerTime)[servString] = e.ms_from_start+2*SRV_UPSTART;
-		    //if (DEBUG)
-		//std::cout<<"Changed listener time for "<<servString<<" to "<<(*listenerTime)[servString]<<std::endl;
-		      //}
 	      }
 	    }
 	    src.clear();
@@ -368,30 +357,35 @@ void FileWorker::loadEvents(int eventsToGet) {
 	  }
       }
     
-    if (false) // Jelena
+    // Now go through times when server should end and add those
+    for(auto it = listenerTime->begin(); it != listenerTime->end();)
       {
-	// Now go through times when server should end and add those
-	for(auto it = listenerTime->begin(); it != listenerTime->end(); it++)
+	if (it->second < lastEventTime - 2*SRV_UPSTART)
 	  {
 	    Event e;
 	    e.serverString = it->first;
 	    e.conn_id = -1;
 	    e.event_id = -1;
 	    e.value = -1;
-	    e.ms_from_start = it->second;
+	    e.ms_from_start = it->second + 2*SRV_UPSTART;
 	    e.ms_from_last_event = 0;
 	    e.type = SRV_END;
 	    shortTermHeap->addEvent(e);
+	    auto dit = it;
+	    it++;
+	    listenerTime->erase(dit);
 	    //if (e.ms_from_start > lastEventTime)
 	    //lastEventTime = e.ms_from_start;
 	    if (DEBUG)
 	      std::cout<<"Created srv end job for "<<e.serverString<<" at time "<<e.ms_from_start<<std::endl;
 	  }
+	else
+	  it++;
       }
     if (DEBUG)
       std::cout << "Loaded " << eventsProduced << " events from file"<<std::endl;
     //shortTermHeap->print();
-      }
+}
 
 bool FileWorker::startup() {
     if (DEBUG)
@@ -457,7 +451,7 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	    std::cout << "Adding event with time: " << shortTermHeap->nextEventTime() << " time of last event added " << lastEventTime <<  std::endl;
 	  std::shared_ptr<Event> e_shr = std::make_shared<Event>(e);
 	  int t;
-	  if (connIDToThread.find(e.conn_id) != connIDToThread.end())
+	  if (connIDToThread.find(e.conn_id) != connIDToThread.end() && (e.type != SRV_START && e.type != SRV_END))
 	    {
 	      t = connIDToThread[e.conn_id];
 	    }
@@ -465,27 +459,74 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	    {
 	      // Check if this connection is for existing
 	      // server string. Jelena
-	      if (e.type == SRV_START)
+	      if (e.type == SRV_START || e.type == SRV_END)
 		{
-		  std::string servString = connIDToServString[e.conn_id];
-		  if (servStringToThread.find(servString) != servStringToThread.end())
-		    t = servStringToThread[servString];
+		  if (DEBUG)
+		    std::cout<<"Handling event of type "<<EventNames[e.type]<<" serv string "<<e.serverString<<std::endl;
+		  if (servStringToThread.find(e.serverString) != servStringToThread.end())
+		    {
+		      t = servStringToThread[e.serverString];
+		      if (DEBUG)
+			std::cout<<"Found existing thread "<<t<<std::endl;
+		    }
 		  else
 		    {
 		      t = findMin();
-		      servStringToThread[servString] = t;
+		      servStringToThread[e.serverString] = t;
+		      if (DEBUG)
+			std::cout<<"Found new thread "<<t<<std::endl;
 		    }
 		  threadToConnCount[t]++;
 		}
 	      else
-		t = findMin();
+		{
+		  t = findMin();
+		  if (DEBUG)
+		    std::cout<<"Found new thread "<<t<<std::endl;
+		}
 	      connIDToThread[e.conn_id] = t;
 	    }
-	  if (DEBUG)
-	    std::cout<<"Added event "<<e.event_id<<" for conn "<<e.conn_id<<" type "<<EventNames[e.type]<<" to thread "<<t<<std::endl;
-											 outEvents[t]->addEvent(e_shr);
-	  threadToEventCount[t]++;
-	         	  
+	  // Figure out if we'll add SRV_START or not
+	  if (e.type == SRV_START)
+	    {
+	      if (listenerTime->find(e.serverString) == listenerTime->end())
+		{
+		  (*listenerTime)[e.serverString] = e.ms_from_start + 2*SRV_UPSTART;
+		  outEvents[t]->addEvent(e_shr);
+		  threadToEventCount[t]++;
+		}
+	      else if(e.ms_from_start > (*listenerTime)[e.serverString] - 2*SRV_UPSTART)
+		{
+		  Event es = e;
+		  es.ms_from_start = (*listenerTime)[e.serverString];
+		  es.type = SRV_END;
+
+		  std::shared_ptr<Event> e_shrs = std::make_shared<Event>(es);
+		  
+		  outEvents[t]->addEvent(e_shrs);
+		  outEvents[t]->addEvent(e_shr);
+		  threadToEventCount[t]++;
+		  threadToEventCount[t]++;
+		  
+		  (*listenerTime)[e.serverString] = e.ms_from_start + 2*SRV_UPSTART;
+		  if (DEBUG)
+		    std::cout<<"Closed server "<<e.serverString<<" at time "<<es.ms_from_start<<" and changed listener time for "<<e.serverString<<" to "<<(*listenerTime)[e.serverString]<<std::endl;
+		}
+	      else
+		{
+		  // Server has already started but we have to note this conn
+		  e_shr->type = SRV_STARTED;
+		  outEvents[t]->addEvent(e_shr);
+		  threadToEventCount[t]++;
+		}
+	    }
+	  else
+	    {	      
+	      outEvents[t]->addEvent(e_shr);
+	      threadToEventCount[t]++;
+	      if (DEBUG)
+		std::cout<<"Added event "<<e.event_id<<" for conn "<<e.conn_id<<" type "<<EventNames[e.type]<<" to thread "<<t<<std::endl;
+	    }
 	  e_shr.reset();
 	  fileEventsAddedCount++;
 	  if(fileEventsAddedCount > maxQueuedFileEvents) {

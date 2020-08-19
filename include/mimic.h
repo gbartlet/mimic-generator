@@ -68,6 +68,7 @@ enum DomainType {
 class Event {
     public:
         std::string serverString = "";
+	std::string connString = "";
         int sockfd = -1;
         long int ms_from_start = 1;	 /* Keep track of event time relative to start in ms. */
         long int ms_from_last_event = -1;

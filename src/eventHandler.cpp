@@ -119,7 +119,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
   char buf[MAXLEN];
   
   if (DEBUG)
-    (*out)<<"EH: dispatch job type "<<EventNames[dispatchJob.type]<<std::endl;
+    (*out)<<"EH: dispatch job type "<<EventNames[dispatchJob.type]<<" now "<<now<<std::endl;
     switch(dispatchJob.type) {
         /* We note these as events in our connection structure. */
         case ACCEPT: {
@@ -207,7 +207,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 		  if (errno != EINPROGRESS)
 		    {
 		      close(sockfd); // should return to pool and try later Jelena
-		      perror("Connecting");
+		      perror("Connecting failed ");
 		      return;
 		    }
 		  else
@@ -268,28 +268,50 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	  
       /* We handle these. */
     case SRV_START: {
-	  std::string servString = dispatchJob.serverString;
-	  struct sockaddr_in addr;
-	  getAddrFromString(servString, &addr);
-			    
-	  int sockfd = getIPv4TCPSock((const struct sockaddr_in*)&addr);
-	   if(sockfd == -1) {
-	     std::cerr << "ERROR: Failed to bind to " << servString << std::endl;
-	     return;
-	   }
-	   //if (DEBUG)
-	   //(*out)<<"Update listening socket "<<sockfd<<" for conn "<<dispatchJob.conn_id<<std::endl;
-	   //newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start+SRV_UPSTART, now);
-	   sockfdToConnIDMap[sockfd] = -1; // Generic listening sock
-	   serverToSockfd[dispatchJob.serverString] = sockfd;
-	   if(listen(sockfd, MAX_BACKLOG_PER_SRV) == -1) {
-	     perror("Listen failed");
-	     return;
-	   }
-	   myPollHandler->watchForRead(sockfd);
+      if(strToConnID.find(dispatchJob.connString) == strToConnID.end())
+	{
+	  strToConnID[dispatchJob.connString] = dispatchJob.conn_id;
+	  if (DEBUG)
+	    (*out)<<"Associated conn "<<dispatchJob.conn_id<<" with "<<dispatchJob.connString<<std::endl;
+	}
+      std::string servString = dispatchJob.serverString;
+      struct sockaddr_in addr;
+      getAddrFromString(servString, &addr);
+      
+      int sockfd = getIPv4TCPSock((const struct sockaddr_in*)&addr);
+      if(sockfd == -1) {
+	std::cerr << "ERROR: Failed to bind to " << servString << std::endl;
+	return;
+      }
+      //if (DEBUG)
+      //(*out)<<"Update listening socket "<<sockfd<<" for conn "<<dispatchJob.conn_id<<std::endl;
+      //newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start+SRV_UPSTART, now);
+      sockfdToConnIDMap[sockfd] = -1; // Generic listening sock
+      serverToSockfd[dispatchJob.serverString] = sockfd;
+      if(listen(sockfd, MAX_BACKLOG_PER_SRV) == -1) {
+	perror("Listen failed");
+	return;
+      }
+      if (DEBUG)
+	(*out)<<"Listening on sock "<<sockfd<<std::endl;
+      myPollHandler->watchForRead(sockfd);
 	   
-	   break;}
-	  
+      break;
+    }
+
+    case SRV_STARTED: {
+
+      // Server has already started, just note the connection
+      if(strToConnID.find(dispatchJob.connString) == strToConnID.end())
+	{
+	  strToConnID[dispatchJob.connString] = dispatchJob.conn_id;
+	  if (DEBUG)
+	    (*out)<<"Associated conn "<<dispatchJob.conn_id<<" with "<<dispatchJob.connString<<std::endl;
+	}
+      // newConnectionUpdate(-1, dispatchJob.conn_id, dispatchJob.ms_from_start, now);
+      break;
+    }
+
     case CLOSE:{
       long int conn_id = dispatchJob.conn_id;
       // Check if we are ready
@@ -301,7 +323,8 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	}
       else
 	{
-	  (*out)<<"Received CLOSE for conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<std::endl;
+	  if (DEBUG)
+	    (*out)<<"Received CLOSE for conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<std::endl;
 	  close(dispatchJob.sockfd);
 	  (*connStats)[dispatchJob.conn_id].state = DONE;
 	  (*connStats)[dispatchJob.conn_id].last_completed++;
@@ -341,29 +364,34 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
     //dispatchJob.reset();
 }
 
+void EventHandler::storeConnections()
+{
+  for(const auto& pair:*connIDToConnectionMap) {
+    long int connID = pair.first;
+    bool success = false;
+    std::string constring = getConnString(&(pair.second->src), &(pair.second->dst), &success);
+    if(success) {
+      strToConnID[constring] = connID;
+      if (DEBUG)
+	(*out)<< "Adding " << constring << ":" << connID << std::endl;
+      constring.clear();
+    }
+    else {
+      std::cerr << "Problem creating connection string for server map of connIDs->connection strings." << std::endl;
+    }
+    constring.clear();
+  }
+  for(const auto& pair:strToConnID) {
+    if (DEBUG)
+      (*out)<< "Conn string " << pair.first << " has id " << pair.second << std::endl;
+  }
+}
+
 bool EventHandler::startup() {
   if (DEBUG)
     (*out)<<"Event handler starting\n";
-    for(const auto& pair:*connIDToConnectionMap) {
-        long int connID = pair.first;
-        bool success = false;
-        std::string constring = getConnString(&(pair.second->src), &(pair.second->dst), &success);
-        if(success) {
-            strToConnID[constring] = connID;
-	    if (DEBUG)
-	      (*out)<< "Adding " << constring << ":" << connID << std::endl;
-            constring.clear();
-        }
-        else {
-            std::cerr << "Problem creating connection string for server map of connIDs->connection strings." << std::endl;
-        }
-        constring.clear();
-    }
-    for(const auto& pair:strToConnID) {
-      if (DEBUG)
-        (*out)<< "Conn string " << pair.first << " has id " << pair.second << std::endl;
-    }
-    return true;
+  storeConnections();
+  return true;
 }
 
 void EventHandler::checkStalledConns(long int now)
@@ -457,8 +485,9 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 
 	// Check if we should ask for more events
 	// if we handled 1/10th of what is max for our thread
-	//(*out)<<"Handled "<<fileEventsHandledCount<<" max "<<maxQueuedFileEvents<<" last event "<<lastEventCountWhenRequestingForMore<<" fehc "<<fileEventsHandledCount<<std::endl;
-	if(fileEventsHandledCount > (maxQueuedFileEvents/numThreads.load()/10)) {
+	
+	//(*out)<<"Handled "<<fileEventsHandledCount<<" max "<<maxQueuedFileEvents<<" last event "<<lastEventCountWhenRequestingForMore<<" fehc "<<fileEventsHandledCount<<" left in queue "<<incomingFileEvents->getLength()<<std::endl;
+	if(fileEventsHandledCount > (maxQueuedFileEvents/10) || incomingFileEvents->getLength() < maxQueuedFileEvents/2) {
 	  lastEventCountWhenRequestingForMore = fileEventsHandledCount;
 	  if (DEBUG)
 	    (*out)<<"requesting more events "<<std::endl;
@@ -564,6 +593,8 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	      int n = recv(fd, buf, MAXLEN, 0);
 	      if (DEBUG)
 		(*out)<<"RECVd 2 "<<n<<" bytes for conn "<<conn_id<<std::endl;
+	      if (n < 0)
+		perror("recv failed");
 	      if (n > 0)		
 		{
 		  long int waited = connToWaitingToRecv[conn_id];
@@ -693,9 +724,21 @@ long int EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int 
     /* Map names to a conn. */
     auto it = strToConnID.find(connString);
     if(it == strToConnID.end()) {
-        std::cerr << "Got connection but could not look up connID." << std::endl;
-        return -1; 
+      (*out) << "Got connection but could not look up connID." << std::endl;
+      // Try again
+      storeConnections();
+      auto ait = strToConnID.find(connString);
+      if (ait == strToConnID.end())
+	{
+	  (*out)<<"Were not able to look up connID." <<std::endl;
+	  return -1; 
 	}
+      else
+	{
+	  (*out)<<"Managed to find connection "<<ait->second;
+	  it = ait;
+	}
+    }
     long int conn_id = it->second;
     
     /* Update our data structures. */

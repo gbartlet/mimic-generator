@@ -407,9 +407,6 @@ int main(int argc, char* argv[]) {
       }
     //std::thread eventHandlerThread2(&EventHandler::loop, eh2, startPoint);
     
-    usleep(10000000 * 300);
-    
-    isRunning.store(false);
     fileWorkerThread.join();
     
     for (int i=0; i<numThreads.load(); i++)

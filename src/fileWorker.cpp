@@ -295,6 +295,10 @@ void FileWorker::loadEvents(int eventsToGet) {
 		if (DEBUG)
 		  std::cout<<"Adding server event START for server "<<e.serverString<<" for conn "<<e.conn_id<<"\n";
 	      }
+	      if (e.ms_from_start + loopedCount*loopDuration > lastEventTime)
+		lastEventTime = e.ms_from_start+ loopedCount * loopDuration;
+	      if (DEBUG)
+		std::cout<<"Lastevent "<<lastEventTime<<std::endl;
 	    }
 	    src.clear();
 	    dst.clear();
@@ -360,7 +364,7 @@ void FileWorker::loadEvents(int eventsToGet) {
     // Now go through times when server should end and add those
     for(auto it = listenerTime->begin(); it != listenerTime->end();)
       {
-	if (it->second < lastEventTime - 2*SRV_UPSTART)
+	if (it->second < lastEventTime - SRV_GAP)
 	  {
 	    Event e;
 	    e.serverString = it->first;
@@ -491,15 +495,17 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	    {
 	      if (listenerTime->find(e.serverString) == listenerTime->end())
 		{
-		  (*listenerTime)[e.serverString] = e.ms_from_start + 2*SRV_UPSTART;
+		  (*listenerTime)[e.serverString] = e.ms_from_start;
 		  outEvents[t]->addEvent(e_shr);
 		  threadToEventCount[t]++;
 		}
-	      else if(e.ms_from_start > (*listenerTime)[e.serverString] - 2*SRV_UPSTART)
+	      else if(e.ms_from_start > (*listenerTime)[e.serverString] + SRV_GAP)
 		{
 		  Event es = e;
-		  es.ms_from_start = (*listenerTime)[e.serverString];
+		  es.ms_from_start = (*listenerTime)[e.serverString] + 2*SRV_UPSTART;
 		  es.type = SRV_END;
+		  if (DEBUG)
+		    std::cout<<"Should Close server "<<e.serverString<<" at time "<<es.ms_from_start<<" listener time is "<<(*listenerTime)[e.serverString]<<" and event time is "<<e.ms_from_start<<std::endl;
 
 		  std::shared_ptr<Event> e_shrs = std::make_shared<Event>(es);
 		  
@@ -508,7 +514,7 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 		  threadToEventCount[t]++;
 		  threadToEventCount[t]++;
 		  
-		  (*listenerTime)[e.serverString] = e.ms_from_start + 2*SRV_UPSTART;
+		  (*listenerTime)[e.serverString] = e.ms_from_start;
 		  if (DEBUG)
 		    std::cout<<"Closed server "<<e.serverString<<" at time "<<es.ms_from_start<<" and changed listener time for "<<e.serverString<<" to "<<(*listenerTime)[e.serverString]<<std::endl;
 		}

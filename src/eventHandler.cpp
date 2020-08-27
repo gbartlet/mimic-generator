@@ -2,7 +2,7 @@
 #include "eventHandler.h"
 #include "connections.h"
 
-#define MAX_BACKLOG_PER_SRV 10
+#define MAX_BACKLOG_PER_SRV 100
 
 /* We start 3 threads */
 /*	- a server thread (takes in start/stop req, produces accepted events.)  */
@@ -117,9 +117,11 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
         EventQueue* incomingSentEvents;
     */
   char buf[MAXLEN];
+
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
   
   if (DEBUG)
-    (*out)<<"EH: dispatch job type "<<EventNames[dispatchJob.type]<<" now "<<now<<std::endl;
+    (*out)<<ms<<" EH: dispatch job type "<<EventNames[dispatchJob.type]<<" now "<<now<<std::endl;
     switch(dispatchJob.type) {
         /* We note these as events in our connection structure. */
         case ACCEPT: {
@@ -424,11 +426,11 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
     //(*out)<<"Next zevent time "<<nextEventTime<<" now "<<now<<std::endl;
     //(*out)<<"EH: Beginning of loop time " <<now<<std::endl;
     // Put a chunk of incomingFileEvents into connection-specific queues
-    while(nextEventTime >= 0 && thisChunk <= maxQueuedFileEvents) {
+    while(nextEventTime >= 0 && thisChunk <= 1000) { // was maxQueuedFileEvents
       std::shared_ptr<Event> job;
       //(*out)<< "EH: Event handler TRYING TO GET JOB" << std::endl;
       if(incomingFileEvents->getEvent(job)){
-	
+	thisChunk++;
 	/* Check if we've processed a fair chunk (maxQueuedFileEvents/10 events) and	*/
 	/* warn the FileWorker that it should top off the file event queue. 		*/
 	Event dispatchJob = *job;
@@ -437,9 +439,14 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	if (dispatchJob.type == SEND || dispatchJob.type == RECV || dispatchJob.type == CLOSE)
 	  connToEventQueue[dispatchJob.conn_id].addEvent(dispatchJob);
 	else
-	  eventsToHandle->addEvent(dispatchJob);
+	  {
+	    eventsToHandle->addEvent(dispatchJob);
+	    if (DEBUG)
+	      (*out)<<"Added job to eventsToHandle "<<std::endl;
+	  }
 	nextEventTime = incomingFileEvents->nextEventTime();
-	//(*out)<< "EVENT HANDLER: Pulled " << fileEventsHandledCount << " events. Next event time is " << nextEventTime << std::endl;
+	if (DEBUG)
+	  (*out)<< "EVENT HANDLER: Pulled " << thisChunk << " events. Next event time is " << nextEventTime << std::endl;
       }
       else {
 	if (DEBUG)
@@ -447,21 +454,22 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
       }
       job.reset();
     }
-        //(*out)<< "EVENT HANDLER: Next event time is: " << nextEventTime << " Now is " << now << std::endl; 
+    if (DEBUG)
+      (*out)<< "EVENT HANDLER: Next event time is: " << nextEventTime << " Now is " << now << std::endl; 
         
-        if(fileEventsHandledCount > maxQueuedFileEvents/2) {
-            fileEventsHandledCount = 0;
-            std::unique_lock<std::mutex> lck(fileHandlerMTX);
-	    if (DEBUG)
-            (*out)<< "Sending wake to fileWorker." << std::endl;
-            loadMoreFileEvents = true;
-            fileHandlerCV.notify_one();
-            lck.unlock();
-        }
+    if(fileEventsHandledCount > maxQueuedFileEvents/2) {
+      fileEventsHandledCount = 0;
+      std::unique_lock<std::mutex> lck(fileHandlerMTX);
+      if (DEBUG)
+	(*out)<< "Sending wake to fileWorker." << std::endl;
+      loadMoreFileEvents = true;
+      fileHandlerCV.notify_one();
+      lck.unlock();
+    }
 
-	long int nextHeapEventTime = eventsToHandle->nextEventTime();
-	//(*out)<<"Next heap time "<<nextHeapEventTime<<" now "<<now<<std::endl;
-	
+    long int nextHeapEventTime = eventsToHandle->nextEventTime();
+    (*out)<<"Next heap time "<<nextHeapEventTime<<" now "<<now<<std::endl;
+    
   
 	while(nextHeapEventTime <= now && nextHeapEventTime >= 0) {
 	  Event dispatchJob = eventsToHandle->nextEvent();
@@ -492,15 +500,20 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  if (DEBUG)
 	    (*out)<<"requesting more events "<<std::endl;
 	  fileEventsHandledCount = 0;
+	  if (DEBUG)
+	    (*out)<<"sending signal "<<std::endl;
 	  requestMoreFileEvents->sendSignal();
+	  if (DEBUG)
+	    (*out)<<"signal sent "<<std::endl;
 	}
 
         /* If the last time we checked the time in the events queue it was empty, redo our check now. */
 	// Check epoll events.
         int timeout = 1;
-        if(nextEventTime - now > 0)
-            timeout = nextEventTime - now;
-
+	
+	if (DEBUG)
+	  (*out)<<"Checking poll handler with timeout "<<timeout<<std::endl;
+	
         myPollHandler->waitForEvents(timeout);
         
         /* Handle any events from poll. Could be 			*/
@@ -512,8 +525,9 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  /* Figure out what we want to do with this event */
 	  int fd = poll_e->data.fd;
 	  long int conn_id = sockfdToConnIDMap[fd];
+	  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	  if (DEBUG)
-	    (*out)<<"Got event on sock "<<fd<<" w flags "<<poll_e->events<<" epoll in "<<EPOLLIN<<" out "<<EPOLLOUT<<" on conn "<<conn_id<<std::endl;
+	    (*out)<<ms<<" Got event on sock "<<fd<<" w flags "<<poll_e->events<<" epoll in "<<EPOLLIN<<" out "<<EPOLLOUT<<" on conn "<<conn_id<<std::endl;
 	  if (conn_id == -1 && ((poll_e->events & EPOLLIN) > 0))
 	    {
 	      if (DEBUG)
@@ -617,8 +631,11 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	    }
         }
         free(poll_e);
+	if (DEBUG)
+	  (*out)<<"Checking stalled conns "<<std::endl;
 	checkStalledConns(now);
-        //(*out)<< "Relooping" << std::endl;
+	if (DEBUG)
+	  (*out)<< "Relooping, time now " <<now<< std::endl;
   }
 }
 

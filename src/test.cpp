@@ -335,7 +335,7 @@ int main(int argc, char* argv[]) {
     //connFile = "testconn.csv";
     //std::string connFile2 = "testconn2.csv";
     std::vector<std::string> eFiles, eFiles2;
-    eventFile = "evconn.csv";
+    //eventFile = "evconn.csv";
     eFiles.push_back(eventFile);
     //eventFile = "events2.csv";
     //eFiles2.push_back(eventFile);

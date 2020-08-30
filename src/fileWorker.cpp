@@ -285,6 +285,7 @@ void FileWorker::loadEvents(int eventsToGet) {
                 /* XXX Have we started a server for this IP:port yet? If not, add event. */
 		(*connStats)[e.conn_id].total_events = 1;
 		e.ms_from_start =  std::max((long int)(std::stod(eventData[i][7].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
+		e.event_id = -2;
                 e.type = SRV_START;
 		if (DEBUG)
 		  std::cout<<"Server string "<<servString<<std::endl;
@@ -522,6 +523,7 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 		{
 		  // Server has already started but we have to note this conn
 		  e_shr->type = SRV_STARTED;
+		  e_shr->event_id = -1;
 		  outEvents[t]->addEvent(e_shr);
 		  threadToEventCount[t]++;
 		}

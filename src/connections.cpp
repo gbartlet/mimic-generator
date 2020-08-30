@@ -73,9 +73,10 @@ std::string getConnString(const struct sockaddr_in* src, const struct sockaddr_i
 int setIPv4TCPNonBlocking(int sockfd) {
     int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
     if(status == -1) {
-        perror("Had trouble getting non-blocking socket.");
-	std::cerr<<" For socket "<<sockfd<<std::endl;
-        return(-1);
+      char errmsg[200];
+      sprintf(errmsg, "Had trouble getting non-blocking socket for %d\n", sockfd);
+      perror(errmsg);
+      return(-1);
     }
     return status;
 }
@@ -83,7 +84,10 @@ int setIPv4TCPNonBlocking(int sockfd) {
 int getIPv4TCPSock(const struct sockaddr_in * sa) {
     /* Get non-blocking socket. */
     int s = socket(AF_INET, SOCK_STREAM, 0);
-    
+    if (s == -1)
+      {
+	perror("Ran out of sockets\n");
+      }
     setIPv4TCPNonBlocking(s);
 
     if(s == -1) 

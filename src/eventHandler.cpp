@@ -1,4 +1,7 @@
 #include <fstream>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "eventHandler.h"
 #include "connections.h"
 
@@ -209,7 +212,10 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 		  if (errno != EINPROGRESS)
 		    {
 		      close(sockfd); // should return to pool and try later Jelena
-		      perror("Connecting failed ");
+		      char errmsg[200];
+		      sprintf(errmsg, " connecting failed, conn %d src %s",dispatchJob.conn_id,inet_ntoa(it->second->src.sin_addr));
+			
+		      perror(errmsg);
 		      return;
 		    }
 		  else
@@ -244,10 +250,16 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
       // Try to send
       while (connToWaitingToSend[dispatchJob.conn_id] > 0)
 	{
+	  if (DEBUG)
+	    (*out)<<"Went into send\n";
 	  int n = send(dispatchJob.sockfd, buf, connToWaitingToSend[dispatchJob.conn_id], 0);
+	  if (DEBUG)
+	    (*out)<<"n is "<<n<<"\n";
 	  if (n < 0)
 	    {
 	      myPollHandler->watchForWrite(dispatchJob.sockfd);
+	      if (DEBUG)
+		(*out)<<"Did not manage to send, but set write flag\n";
 	      break;
 	    }
 	  else
@@ -270,6 +282,8 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	  
       /* We handle these. */
     case SRV_START: {
+      if (DEBUG)
+	(*out)<<"Starting server "<<dispatchJob.serverString<<std::endl;
       if(strToConnID.find(dispatchJob.connString) == strToConnID.end())
 	{
 	  strToConnID[dispatchJob.connString] = dispatchJob.conn_id;
@@ -295,7 +309,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	return;
       }
       if (DEBUG)
-	(*out)<<"Listening on sock "<<sockfd<<std::endl;
+	(*out)<<"Listening on sock "<<sockfd<<" for server "<<dispatchJob.serverString<<std::endl;
       myPollHandler->watchForRead(sockfd);
 	   
       break;
@@ -363,6 +377,8 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
             break;
         }
     }
+    if (DEBUG)
+      (*out)<<"Getting out of dispatch\n";
     //dispatchJob.reset();
 }
 
@@ -402,7 +418,7 @@ void EventHandler::checkStalledConns(long int now)
   for (auto it = connToSockfdIDMap.begin(); it != connToSockfdIDMap.end(); it++)
     {
       if (DEBUG)
-	(*out)<<"Checking conn "<<it->first<<" waiting to send "<<connToWaitingToSend[it->first]<<" and to recv "<<connToWaitingToRecv[it->first]<<" state "<<connState[it->first]<<std::endl; 
+	(*out)<<"Checking conn "<<it->first<<" waiting to send "<<connToWaitingToSend[it->first]<<" and to recv "<<connToWaitingToRecv[it->first]<<" state "<<connState[it->first]<<" stalled "<<connToStalled[it->first]<<std::endl; 
       if (connToWaitingToSend[it->first] <= 0 &&  connToWaitingToRecv[it->first] <= 0 && connState[it->first] != DONE && connToStalled[it->first])
 	{
 	  getNewEvents(it->first);
@@ -435,7 +451,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	/* warn the FileWorker that it should top off the file event queue. 		*/
 	Event dispatchJob = *job;
 	if (DEBUG)
-	  (*out)<< "File Event handler GOT JOB " << EventNames[dispatchJob.type] <<" conn "<<dispatchJob.conn_id<<" event id "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<" server "<<dispatchJob.serverString<<std::endl;
+	  (*out)<< "File Event handler GOT JOB " << EventNames[dispatchJob.type] <<" serverstring "<<dispatchJob.serverString<<" conn "<<dispatchJob.conn_id<<" event id "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<" server "<<dispatchJob.serverString<<std::endl;
 	if (dispatchJob.type == SEND || dispatchJob.type == RECV || dispatchJob.type == CLOSE)
 	  connToEventQueue[dispatchJob.conn_id].addEvent(dispatchJob);
 	else
@@ -476,7 +492,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  fileEventsHandledCount++;
 	  if(true){ // this was if (bool = got a job)
 	    if (DEBUG)
-	      (*out)<< "Heap Event handler GOT JOB " << EventNames[dispatchJob.type] <<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<" events handled "<<fileEventsHandledCount<<std::endl;
+	      (*out)<< "Heap Event handler GOT JOB " << EventNames[dispatchJob.type] <<" server "<<dispatchJob.serverString<<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<" events handled "<<fileEventsHandledCount<<std::endl;
 
                 dispatch(dispatchJob, now);
                 nextHeapEventTime = eventsToHandle->nextEventTime();
@@ -653,10 +669,12 @@ void EventHandler::getNewEvents(long int conn_id)
   myfile.close();*/
   // Jelena
   if (DEBUG)
-    (*out)<<"Getting new events for conn "<<conn_id<<std::endl;
-  // Get only one job
+    (*out)<<"Getting new events for conn "<<conn_id<<" next event time is "<<nextEventTime<<std::endl;
+
   if (nextEventTime >= 0)
     connToStalled[conn_id] = false;
+  else
+    connToStalled[conn_id] = true;
   
   while (nextEventTime >= 0)
     {

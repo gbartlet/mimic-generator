@@ -247,10 +247,10 @@ void FileWorker::loadEvents(int eventsToGet) {
 	    std::string dst = trim(eventData[i][5]);
 	    int dport = std::stoi(eventData[i][6].c_str());
 	    char ports[10], portd[10];
-	    sprintf(ports, "%d", dport);
-	    sprintf(portd, "%d", sport);
-	    std::string servString = dst + ":" + ports;
-	    std::string connString = src + ":" + portd;
+	    sprintf(portd, "%d", dport);
+	    sprintf(ports, "%d", sport);
+	    std::string servString = dst + ":" + portd;
+	    std::string connString = src + ":" + ports+","+dst+":"+portd;
 	    if (DEBUG)
 	      std::cout << "Check if IP '" << src << "' and '" << dst << "' are in my connections." << std::endl;
 	    if(isMyIP(src) || isMyIP(dst)) {
@@ -363,6 +363,7 @@ void FileWorker::loadEvents(int eventsToGet) {
       }
     
     // Now go through times when server should end and add those
+    /*
     for(auto it = listenerTime->begin(); it != listenerTime->end();)
       {
 	if (it->second < lastEventTime - SRV_GAP)
@@ -386,7 +387,7 @@ void FileWorker::loadEvents(int eventsToGet) {
 	  }
 	else
 	  it++;
-      }
+	  }*/
     if (DEBUG)
       std::cout << "Loaded " << eventsProduced << " events from file"<<std::endl;
     //shortTermHeap->print();
@@ -494,12 +495,13 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	  // Figure out if we'll add SRV_START or not
 	  if (e.type == SRV_START)
 	    {
-	      if (listenerTime->find(e.serverString) == listenerTime->end())
+	      //if (listenerTime->find(e.serverString) == listenerTime->end()) // Jelena
 		{
 		  (*listenerTime)[e.serverString] = e.ms_from_start;
 		  outEvents[t]->addEvent(e_shr);
 		  threadToEventCount[t]++;
 		}
+		/* Jelena
 	      else if(e.ms_from_start > (*listenerTime)[e.serverString] + SRV_GAP)
 		{
 		  Event es = e;
@@ -526,7 +528,7 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 		  e_shr->event_id = -1;
 		  outEvents[t]->addEvent(e_shr);
 		  threadToEventCount[t]++;
-		}
+		  }*/
 	    }
 	  else
 	    {	      

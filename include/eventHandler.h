@@ -66,6 +66,8 @@ class EventHandler {
 	std::unordered_map<long int, bool> connToStalled;
 	std::unordered_map<long int, long int>* connTime;
 	std::unordered_map<std::string, long int>* listenerTime;
+	std::unordered_map<std::string, long int> srvStarted;
+	std::unordered_map<std::string, long int> orphanConn;
 	std::unordered_map<long int, struct stats>* connStats;
 	
         EventHeap waitHeap;
@@ -81,6 +83,7 @@ class EventHandler {
 	long int acceptNewConnection(struct epoll_event *poll_e, long int now);
 	void getNewEvents(long int conn_id);
 	void checkStalledConns(long int now);
+	void checkOrphanConns(long int now);
 	bool DEBUG = 0;
 	
     public:

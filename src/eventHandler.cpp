@@ -1,4 +1,5 @@
 #include <fstream>
+#include <exception>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -162,33 +163,41 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	     {
 	       if (DEBUG)
 		 (*out)<<"Waiting for conn "<<dispatchJob.conn_id<<" b to recv "<<connToWaitingToRecv[dispatchJob.conn_id]<<std::endl;
-	       int n = recv(dispatchJob.sockfd, buf, MAXLEN, 0);
-	       if (n > 0)
+	       try
 		 {
-		   if (DEBUG)
-		     (*out)<<"RECVd 1 "<<n<<" bytes for conn "<<dispatchJob.conn_id<<std::endl;
-		   connToWaitingToRecv[dispatchJob.conn_id] -= n;
-		   // if (connToWaitingToRecv[dispatchJob.conn_id] < 0) // weird case
-			//connToWaitingToRecv[dispatchJob.conn_id] = 0;
-		   if (DEBUG)
-		     (*out)<<"RECV waiting now for "<<connToWaitingToRecv[dispatchJob.conn_id]<<" conn "<<dispatchJob.conn_id<<std::endl;
-		  // Check if lower than 0 or 0 move new event ahead
-		   
-		   if (connToWaitingToRecv[dispatchJob.conn_id] <= 0)
-		    {
-		      (*connStats)[dispatchJob.conn_id].last_completed++;
-		      if (DEBUG)
-			(*out)<<"For conn "<<dispatchJob.conn_id<<" last completed 8 "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
-		      connectionUpdate(dispatchJob.conn_id, 0, now);
-		      getNewEvents(dispatchJob.conn_id);		      
-		      break;
-		    }
+		   int n = recv(dispatchJob.sockfd, buf, MAXLEN, 0);
+		   if (n > 0)
+		     {
+		       if (DEBUG)
+			 (*out)<<"RECVd 1 "<<n<<" bytes for conn "<<dispatchJob.conn_id<<std::endl;
+		       connToWaitingToRecv[dispatchJob.conn_id] -= n;
+		       // if (connToWaitingToRecv[dispatchJob.conn_id] < 0) // weird case
+		       //connToWaitingToRecv[dispatchJob.conn_id] = 0;
+		       if (DEBUG)
+			 (*out)<<"RECV waiting now for "<<connToWaitingToRecv[dispatchJob.conn_id]<<" conn "<<dispatchJob.conn_id<<std::endl;
+		       // Check if lower than 0 or 0 move new event ahead
+		       
+		       if (connToWaitingToRecv[dispatchJob.conn_id] <= 0)
+			 {
+			   (*connStats)[dispatchJob.conn_id].last_completed++;
+			   if (DEBUG)
+			     (*out)<<"For conn "<<dispatchJob.conn_id<<" last completed 8 "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
+			   connectionUpdate(dispatchJob.conn_id, 0, now);
+			   getNewEvents(dispatchJob.conn_id);		      
+			   break;
+			 }
+		     }
+		   else
+		     {
+		       if (DEBUG)
+			 (*out)<<"Will wait to RECV "<<connToWaitingToRecv[dispatchJob.conn_id]<<" for conn "<<dispatchJob.conn_id<<" on sock "<<dispatchJob.sockfd<<std::endl;
+		       myPollHandler->watchForRead(dispatchJob.sockfd);
+		       break;
+		     }
 		 }
-	       else
+	       catch(std::exception& e)
 		 {
-		   if (DEBUG)
-		     (*out)<<"Will wait to RECV "<<connToWaitingToRecv[dispatchJob.conn_id]<<" for conn "<<dispatchJob.conn_id<<" on sock "<<dispatchJob.sockfd<<std::endl;
-		   myPollHandler->watchForRead(dispatchJob.sockfd);
+		   std::cerr<<"Errored out while receiving for "<<dispatchJob.conn_id<<" exception "<<e.what()<<std::endl;
 		   break;
 		 }
 	     }
@@ -252,21 +261,28 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	{
 	  if (DEBUG)
 	    (*out)<<"Went into send\n";
-	  int n = send(dispatchJob.sockfd, buf, connToWaitingToSend[dispatchJob.conn_id], 0);
-	  if (DEBUG)
-	    (*out)<<"n is "<<n<<"\n";
-	  if (n < 0)
+	  try{
+	    int n = send(dispatchJob.sockfd, buf, connToWaitingToSend[dispatchJob.conn_id], 0);
+	    if (DEBUG)
+	      (*out)<<"n is "<<n<<"\n";
+	    if (n < 0)
+	      {
+		myPollHandler->watchForWrite(dispatchJob.sockfd);
+		if (DEBUG)
+		  (*out)<<"Did not manage to send, but set write flag\n";
+		break;
+	      }
+	    else
+	      {
+		connToWaitingToSend[dispatchJob.conn_id] -= n;
+		if (DEBUG)
+		  (*out)<<"Successfuly handled SEND event for conn "<<dispatchJob.conn_id<<" for "<<n<<" bytes\n";
+	      }
+	  }
+	  catch(int e)
 	    {
-	      myPollHandler->watchForWrite(dispatchJob.sockfd);
-	      if (DEBUG)
-		(*out)<<"Did not manage to send, but set write flag\n";
+	      std::cerr<<"Errored out while sending for "<<dispatchJob.conn_id<<std::endl;
 	      break;
-	    }
-	  else
-	    {
-	      connToWaitingToSend[dispatchJob.conn_id] -= n;
-	      if (DEBUG)
-		(*out)<<"Successfuly handled SEND event for conn "<<dispatchJob.conn_id<<" for "<<n<<" bytes\n";
 	    }
 	}
       //if (connToWaitingToSend[dispatchJob.conn_id] < 0)
@@ -278,10 +294,21 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	    (*out)<<"For conn "<<dispatchJob.conn_id<<" last completed 1 "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
 	}
       break;
-    }
+	}
 	  
       /* We handle these. */
     case SRV_START: {
+      /* Check if the server is already started */
+      if (srvStarted.find(dispatchJob.serverString) != srvStarted.end())
+	{
+	  if(strToConnID.find(dispatchJob.connString) == strToConnID.end())
+	    {
+	      strToConnID[dispatchJob.connString] = dispatchJob.conn_id;
+	      if (DEBUG)
+		(*out)<<"Associated conn "<<dispatchJob.conn_id<<" with "<<dispatchJob.connString<<std::endl;
+	    }
+	  break;
+	}
       if (DEBUG)
 	(*out)<<"Starting server "<<dispatchJob.serverString<<std::endl;
       if(strToConnID.find(dispatchJob.connString) == strToConnID.end())
@@ -308,6 +335,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	perror("Listen failed");
 	return;
       }
+      srvStarted[dispatchJob.serverString] = now;
       if (DEBUG)
 	(*out)<<"Listening on sock "<<sockfd<<" for server "<<dispatchJob.serverString<<std::endl;
       myPollHandler->watchForRead(sockfd);
@@ -426,6 +454,29 @@ void EventHandler::checkStalledConns(long int now)
     }
 }
 
+void EventHandler::checkOrphanConns(long int now)
+{
+  // Go through conns and try to load more events if there are any
+  for (auto it = orphanConn.begin(); it != orphanConn.end(); it++)
+    {
+      if (DEBUG)
+	(*out)<<"Checking orphaned conn "<<it->first<<std::endl;
+      auto sit = strToConnID.find(it->first);
+      if (sit != strToConnID.end())
+	{
+	  long int conn_id = sit->second;
+	  if (DEBUG)
+	    (*out)<<"Found conn "<<conn_id<<" on socket "<<it->second<<" time "<<now<<std::endl;
+	  connToLastPlannedEvent[conn_id] = now;
+	  newConnectionUpdate(it->second, conn_id, 0, now);
+	  connState[conn_id] = EST;
+	  (*connStats)[conn_id].state = EST;
+	  (*connStats)[conn_id].last_completed++;
+	  getNewEvents(sit->second);
+	}
+    }
+}
+
 void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime) {
   long int now = msSinceStart(startTime);
   // Allocate a really big buffer filled with a's
@@ -435,8 +486,13 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
   (*out)<<"EH: looping, incoming file events "<<incomingFileEvents<<"\n";
   if (DEBUG)
   (*out)<<"EH: Is running is "<<isRunning.load()<<std::endl;
+  long int fileEvents = 0;
   
   while(isRunning.load()) {
+    if (incomingFileEvents->getLength() > fileEvents)
+      fileEvents = incomingFileEvents->getLength();
+    if (DEBUG)
+      (*out)<<"There are "<<fileEvents<<" file events"<<std::endl;
     long int nextEventTime = incomingFileEvents->nextEventTime();
     long int thisChunk = 0;
     //(*out)<<"Next zevent time "<<nextEventTime<<" now "<<now<<std::endl;
@@ -511,10 +567,12 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	// if we handled 1/10th of what is max for our thread
 	
 	//(*out)<<"Handled "<<fileEventsHandledCount<<" max "<<maxQueuedFileEvents<<" last event "<<lastEventCountWhenRequestingForMore<<" fehc "<<fileEventsHandledCount<<" left in queue "<<incomingFileEvents->getLength()<<std::endl;
-	if(fileEventsHandledCount > (maxQueuedFileEvents/10) || incomingFileEvents->getLength() < maxQueuedFileEvents/2) {
+	if(fileEventsHandledCount > (maxQueuedFileEvents/10) || incomingFileEvents->getLength() < maxQueuedFileEvents/2)
+	  {//
+	  //if((fileEventsHandledCount > (fileEvents/2) || incomingFileEvents->getLength() < maxQueuedFileEvents/2 && lastEventCountWhenRequestingForMore + fileEvents/10 < fileEventsHandledCount)) {
 	  lastEventCountWhenRequestingForMore = fileEventsHandledCount;
 	  if (DEBUG)
-	    (*out)<<"requesting more events "<<std::endl;
+	    (*out)<<"requesting more events, last "<<lastEventCountWhenRequestingForMore<<" file events "<<fileEvents<<" handled "<<fileEventsHandledCount<<std::endl;
 	  fileEventsHandledCount = 0;
 	  if (DEBUG)
 	    (*out)<<"sending signal "<<std::endl;
@@ -570,6 +628,12 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	    }
 	  if (connState[conn_id] == CONNECTING) // && (poll_e->events & EPOLLOUT > 0))
 	    {
+	      // Check if we errored out
+	      if ((poll_e->events & EPOLLHUP) || (poll_e->events & EPOLLERR))
+		{
+		  // Give up on this conn somehow, Jelena
+		  continue;
+		}
 	      // Check for error if (getsockopt (socketFD, SOL_SOCKET, SO_ERROR, &retVal, &retValLen) < 0)
 	      // ERROR, fail somehow, close socket
 	      //if (retVal != 0) 
@@ -585,6 +649,11 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	   }
 	  if (connState[conn_id] == EST && ((poll_e->events & EPOLLOUT) > 0))
 	    {
+	      if ((poll_e->events & EPOLLHUP) || (poll_e->events & EPOLLERR))
+		{
+		  // Give up on this conn somehow, Jelena
+		  continue;
+		}
 	      int len = connToWaitingToSend[conn_id];
 	      if (DEBUG)
 	      (*out)<<"EH possibly got SEND event for conn "<<conn_id<<" flags "<<poll_e->events<<" epollout "<<EPOLLOUT<<" comparison "<<((poll_e->events & EPOLLOUT) > 0)<<" should send "<<len<<std::endl;
@@ -593,56 +662,79 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 		{
 		  if (DEBUG)
 		  (*out)<<"Waiting to send "<<connToWaitingToSend[conn_id]<<" on socket "<<fd<<std::endl;
-		  int n = send(fd, buf, len, 0);
-		  if (n > 0)
+		  try
 		    {
-		      if (DEBUG)
-			(*out)<<"Successfully handled SEND for conn "<<conn_id<<" for "<<n<<" bytes\n";
-		      connToWaitingToSend[conn_id] -= n;
-		      if (connToWaitingToSend[conn_id] > 0)
+		      int n = send(fd, buf, len, 0);
+		      if (n > 0)
 			{
 			  if (DEBUG)
-			    (*out)<<"Still have to send "<<connToWaitingToSend[conn_id]<<" bytes\n";
-			  myPollHandler->watchForWrite(fd);
+			    (*out)<<"Successfully handled SEND for conn "<<conn_id<<" for "<<n<<" bytes\n";
+			  connToWaitingToSend[conn_id] -= n;
+			  if (connToWaitingToSend[conn_id] > 0)
+			    {
+			      if (DEBUG)
+				(*out)<<"Still have to send "<<connToWaitingToSend[conn_id]<<" bytes\n";
+			      myPollHandler->watchForWrite(fd);
+			    }
+			  else
+			    {
+			      connectionUpdate(conn_id, 0, now);
+			      (*connStats)[conn_id].last_completed++; // here we could remember the event id instead of count
+			      if (DEBUG)
+				(*out)<<"For conn "<<conn_id<<" last completed 5 "<<(*connStats)[conn_id].last_completed<<std::endl;
+			      getNewEvents(conn_id);
+			    }
 			}
-		      else
-			{
-			  connectionUpdate(conn_id, 0, now);
-			  (*connStats)[conn_id].last_completed++; // here we could remember the event id instead of count
-			  if (DEBUG)
-			    (*out)<<"For conn "<<conn_id<<" last completed 5 "<<(*connStats)[conn_id].last_completed<<std::endl;
-			  getNewEvents(conn_id);
-			}
+		    }
+		  catch(int e)
+		    {
+		      std::cerr<<"Errored out while sending for "<<conn_id<<std::endl;
 		    }
 		}
 	    }
 	  if (connState[conn_id] == EST && ((poll_e->events & EPOLLIN) > 0))
 	    {
+	      if ((poll_e->events & EPOLLHUP) || (poll_e->events & EPOLLERR))
+		{
+		  // Give up on this conn somehow, Jelena
+		  continue;
+		}
 	      if (DEBUG)
 		(*out)<<"Possibly handling a RECV event for conn "<<conn_id<<" on sock "<<fd<<std::endl;
-	      int n = recv(fd, buf, MAXLEN, 0);
-	      if (DEBUG)
-		(*out)<<"RECVd 2 "<<n<<" bytes for conn "<<conn_id<<std::endl;
-	      if (n < 0)
-		perror("recv failed");
-	      if (n > 0)		
+	      try
 		{
-		  long int waited = connToWaitingToRecv[conn_id];
-		  connToWaitingToRecv[conn_id] -= n;
-		  //if (connToWaitingToRecv[conn_id] < 0) // weird case
-		      // connToWaitingToRecv[conn_id] = 0;
+		  int n = recv(fd, buf, MAXLEN, 0);
 		  if (DEBUG)
-		    (*out)<<"RECV waiting now for "<<connToWaitingToRecv[conn_id]<<" on conn "<<conn_id<<std::endl;
-		  // Check if  0 move new event ahead // Jelena this still does not handle wait + wait if we ever have that case 
-		  if (connToWaitingToRecv[conn_id] == 0 ||
-		      (connToWaitingToRecv[conn_id] < 0 && waited > 0))
-		    {		     
-		      connectionUpdate(conn_id, 0, now);
-		      (*connStats)[conn_id].last_completed++; // here we could remember the event id instead of count Jelena check
-		      if (DEBUG)
-			(*out)<<"For conn "<<conn_id<<" last completed 6 "<<(*connStats)[conn_id].last_completed<<std::endl;
-		      getNewEvents(conn_id);
+		    (*out)<<"RECVd 2 "<<n<<" bytes for conn "<<conn_id<<std::endl;
+		  if (n < 0)
+		    {
+		      char errmsg[200];
+		      sprintf(errmsg, "recv failed on conn %d socket %d\n", conn_id, fd);
+		      perror(errmsg);
 		    }
+		  if (n > 0)		
+		    {
+		      long int waited = connToWaitingToRecv[conn_id];
+		      connToWaitingToRecv[conn_id] -= n;
+		      //if (connToWaitingToRecv[conn_id] < 0) // weird case
+		      // connToWaitingToRecv[conn_id] = 0;
+		      if (DEBUG)
+			(*out)<<"RECV waiting now for "<<connToWaitingToRecv[conn_id]<<" on conn "<<conn_id<<std::endl;
+		      // Check if  0 move new event ahead // Jelena this still does not handle wait + wait if we ever have that case 
+		      if (connToWaitingToRecv[conn_id] == 0 ||
+			  (connToWaitingToRecv[conn_id] < 0 && waited > 0))
+			{		     
+			  connectionUpdate(conn_id, 0, now);
+			  (*connStats)[conn_id].last_completed++; // here we could remember the event id instead of count Jelena check
+			  if (DEBUG)
+			    (*out)<<"For conn "<<conn_id<<" last completed 6 "<<(*connStats)[conn_id].last_completed<<std::endl;
+			  getNewEvents(conn_id);
+			}
+		    }
+		}
+	      catch(int e)
+		{
+		  std::cerr<<"Errored out while receiving for "<<conn_id<<std::endl;
 		}
 	    }
         }
@@ -650,6 +742,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	if (DEBUG)
 	  (*out)<<"Checking stalled conns "<<std::endl;
 	checkStalledConns(now);
+	checkOrphanConns(now);
 	if (DEBUG)
 	  (*out)<< "Relooping, time now " <<now<< std::endl;
   }
@@ -760,13 +853,15 @@ long int EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int 
     auto it = strToConnID.find(connString);
     if(it == strToConnID.end()) {
       (*out) << "Got connection but could not look up connID." << std::endl;
+
       // Try again
       storeConnections();
       auto ait = strToConnID.find(connString);
       if (ait == strToConnID.end())
 	{
 	  (*out)<<"Were not able to look up connID." <<std::endl;
-	  return -1; 
+	  orphanConn[connString] = newSockfd;
+	  return -2; 
 	}
       else
 	{
@@ -801,7 +896,8 @@ EventHandler::EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<l
     sendReq = outSendQ;
     connStats = cs;
     DEBUG = debug;
-    
+
+    srvStarted = {};
     sockfdToConnIDMap = {};
     connToSockfdIDMap = {};
     connToStalled = {};

@@ -1,4 +1,5 @@
 #include <atomic>
+#include <exception>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -408,17 +409,30 @@ int main(int argc, char* argv[]) {
     //std::thread eventHandlerThread2(&EventHandler::loop, eh2, startPoint);
     
     fileWorkerThread.join();
-    
-    for (int i=0; i<numThreads.load(); i++)
-      eventHandlerThread[i]->join();
 
+    try
+      {
+	for (int i=0; i<numThreads.load(); i++)
+	  eventHandlerThread[i]->join();
+      }
+    catch(std::exception& e)
+      {
+	std::cout<<"Thread died "<<e.what()<<std::endl;
+      }
+    /*
     EventQueue* eq = new EventQueue();
     std::thread connThread(connectionHandlerThread,numConns, sendQ);
     connThread.join();
+    while(true)
+      {
+	sleep(1);
+	print_stats();
+      }
     exit(0);
+    */
 
-
-
+    while(true)
+      sleep(1);
 
 
 

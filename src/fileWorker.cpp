@@ -183,6 +183,12 @@ void FileWorker::loadEvents(int eventsToGet) {
   if (DEBUG)
     std::cout << "Loading events, last line " <<lastLine<<std::endl;
 
+    for(int i=0; i<numThreads.load();i++)
+      {
+	threadToConnCount[i] = 0;
+	threadToEventCount[i] = 0;
+      }
+
     int currentThread = 0;
 
     int eventsProduced = 0;
@@ -545,6 +551,10 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	  }
 	  nextET = shortTermHeap->nextEventTime();
         }
+	for(int i=0; i<numThreads.load();i++)
+	  {
+	    std::cout<<"Thread "<<i<<" conns "<<threadToConnCount[i]<<" events "<<threadToEventCount[i]<<std::endl;
+	  }
 
 	if (isInitd.load() == false)
 	  isInitd.store(true);
@@ -561,7 +571,7 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
                 std::cout << "Got load notification from loadEventsNotifier." << std::endl;
                 loadEventsNotifier->readSignal();
             }
-            loadEvents(maxQueuedFileEvents/10);
+            loadEvents(maxQueuedFileEvents);
         }
     }     
 }

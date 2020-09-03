@@ -13,7 +13,7 @@
 #include "serverWorker.h"
 #include "connections.h"
 
-#define START_PORT 5000
+#define SRV_PORT 5205
 
 std::atomic<bool> isRunning = false;
 std::atomic<bool> isInitd = false;
@@ -21,6 +21,9 @@ std::atomic<int> numThreads = 1;
 std::mutex fileHandlerMTX;
 std::condition_variable fileHandlerCV;
 bool loadMoreFileEvents = true;
+std::string servString = "";
+std::string serverIP = "";
+
 
 void serverSocketsThread(std::string serverIP, int numConns, EventQueue* eq) {
     int sockets[numConns]; 
@@ -46,8 +49,8 @@ void serverSocketsThread(std::string serverIP, int numConns, EventQueue* eq) {
         struct sockaddr_in sa;
         sa.sin_family = AF_INET;
         inet_pton(AF_INET, serverIP.c_str(), &(sa.sin_addr));
-        sa.sin_port = htons(START_PORT + i);
-        std::cout << "Binding to port " << START_PORT + i << std::endl;
+        sa.sin_port = htons(SRV_PORT + i);
+        std::cout << "Binding to port " << SRV_PORT + i << std::endl;
         if(bind(sockets[i], (struct sockaddr *)&sa, sizeof(sa)) <0) {
             perror("bind failed.");
             exit(-1);
@@ -228,11 +231,90 @@ void signal_callback_handler(int signum) {
    exit(signum);
 }
 
+void waitForPeer()
+{
+  struct sockaddr_in servaddr, cliaddr;
+    
+  int sockfd;
+  
+  // socket create and verification 
+  sockfd = socket(AF_INET, SOCK_STREAM, 0); 
+  if (sockfd == -1) { 
+    std::cerr<<"socket creation failed...\n";
+    exit(0); 
+  } 
+
+  getAddrFromString(servString, &servaddr);
+  
+  // connect the client socket to server socket 
+  while(connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) != 0) { 
+    std::cerr<<"connection with the server failed...\n";
+    sleep(1);
+  }
+  char buf[2];
+  int n = recv(sockfd, buf, 3, 0);
+  if (n <= 0 || strcmp(buf,"OK"))
+    exit(0);
+  close(sockfd);
+}
+
+void informPeer()
+{
+  struct sockaddr_in servaddr;
+
+  struct sockaddr cliaddr;
+  int in_addr_size = sizeof(cliaddr);
+    
+  getAddrFromString(servString, &servaddr);
+
+  // Get an ordinary,blocking socket
+  int sockfd = socket(AF_INET, SOCK_STREAM, 0); 
+    if (sockfd == -1) { 
+      std::cerr<<"socket creation failed...\n";
+      exit(0); 
+    } 
+
+     servaddr.sin_family = AF_INET;
+    inet_pton(AF_INET, serverIP.c_str(), &(servaddr.sin_addr));
+    // assign IP, PORT 
+    servaddr.sin_port = htons(SRV_PORT); 
+
+    int optval = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+
+    
+    // Binding newly created socket to given IP and verification 
+    if ((bind(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr))) != 0) { 
+      perror("socket bind failed...\n"); 
+      exit(0); 
+    } 
+
+
+  if(listen(sockfd, MAX_BACKLOG_PER_SRV) == -1) {
+    perror("Listen failed");
+    return;
+  }
+  std::cout<<"Server is listening\n";
+  
+
+  // Accept one client, send OK and close
+  // Later we can add more clients
+  int newSockfd = accept(sockfd, &cliaddr, (socklen_t*)&in_addr_size);
+  
+  if (newSockfd < 0) { 
+    printf("server acccept failed...\n"); 
+    exit(0); 
+  }
+  
+  send(newSockfd,"OK", 3, 0);
+  close(newSockfd);
+  close(sockfd);
+}
+
 int main(int argc, char* argv[]) {
 
     signal(SIGINT, signal_callback_handler);
   
-    std::string serverIP = "10.1.1.2";
     int numConns = 1000;
     bool isServer = false;
     bool roleFlag = false;
@@ -263,8 +345,10 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 else if(arg == "-s") {
-                    serverIP = argv[i+1];
-                    i++;
+		  std::cout<<"This is server\n";
+		  isServer = true;
+		  serverIP = argv[i+1];
+		  i++;
                 }
                 else if(arg == "-i") {
                     ipFile = argv[i+1];
@@ -274,22 +358,21 @@ int main(int argc, char* argv[]) {
 		  DEBUG = true;
                 }
                 else if(arg == "-c") {
-                    connFile = argv[i+1];
-                    i++;
+		  serverIP = argv[i+1];
+		  i++;
                 }
 		else if(arg == "-e") {
-                    eventFile = argv[i+1];
-                    i++;
+		  eventFile = argv[i+1];
+		  i++;
                 }
             }
             else {
                 std::cerr << arg << " requires argument." << std::endl;
                 exit(-1);
             }
-        }
-        
-        /* Arg tells us what role we should play. (
-        else if((arg == "-C") || (arg == "-S")) {
+      }
+      /* Arg tells us what role we should play. (
+	 else if((arg == "-C") || (arg == "-S")) {
             if(roleFlag) {
                 std::cerr << "Given both -C and -S: choose one roll Server (-S) or Client (-C)" << std::endl;
                 exit(-1);
@@ -300,9 +383,13 @@ int main(int argc, char* argv[]) {
         
         /* We don't recognize this argument. */
         else {
-	  std::cerr << "Usage: " << argv[0] << " {-i IPFile} {-c connFile} {-e eventFile}  wrong arg " <<arg<<std::endl;
+	  std::cerr << "Usage: " << argv[0] << " {-i IPFile} {-c serverIP} {-s serverIP} {-e eventFile} {-t numThreads} wrong arg " <<arg<<std::endl;
         }
     }
+    char ss[50];
+    sprintf(ss, "%s:%d", serverIP.c_str(), SRV_PORT);
+    servString = ss;
+
     
     if(ipFile == "") {
         std::cerr << "We need an IPFile argument." << std::endl;
@@ -401,6 +488,12 @@ int main(int argc, char* argv[]) {
         
     /* Event Handler. */
     std::thread** eventHandlerThread = (std::thread**)malloc(numThreads.load()*sizeof(std::thread*));
+
+    /* We're ready to start, notify the other side */
+    if (isServer)
+      informPeer();
+    else
+      waitForPeer();
 
     for (int i=0; i<numThreads.load(); i++)
       {

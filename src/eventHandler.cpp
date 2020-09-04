@@ -173,6 +173,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 		       n = recv(dispatchJob.sockfd, buf, MAXLEN, 0);
 		     }
 		   total += n;
+
 		   if (total > 0)
 		     {
 		       if (DEBUG)
@@ -368,6 +369,8 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
       // Check if we are ready
       if (connToWaitingToSend[conn_id] > 0  || connToWaitingToRecv[conn_id] > 0)
 	{
+	  if (DEBUG)
+	    (*out)<<"Conn "<<conn_id<<" not ready, waiting to send "<<connToWaitingToSend[conn_id]<<" and to receive "<<connToWaitingToRecv[conn_id]<<std::endl;
 	  // Not ready, return to queue
 	  dispatchJob.ms_from_start += SRV_UPSTART;
 	  eventsToHandle->addEvent(dispatchJob);
@@ -756,6 +759,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 		       n = recv(fd, buf, MAXLEN, 0);
 		     }
 		   total += n;
+
 		   if (DEBUG)
 		     (*out)<<"RECVd 2 "<<total<<" bytes for conn "<<conn_id<<std::endl;
 
@@ -763,11 +767,10 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 		    {
 		      long int waited = connToWaitingToRecv[conn_id];
 		      connToWaitingToRecv[conn_id] -= total;
-		      //if (connToWaitingToRecv[conn_id] < 0) // weird case
-		      // connToWaitingToRecv[conn_id] = 0;
+
 		      if (DEBUG)
 			(*out)<<"RECV waiting now for "<<connToWaitingToRecv[conn_id]<<" on conn "<<conn_id<<std::endl;
-		      // Check if  0 move new event ahead // Jelena this still does not handle wait + wait if we ever have that case 
+
 		      if (connToWaitingToRecv[conn_id] == 0 ||
 			  (connToWaitingToRecv[conn_id] < 0 && waited > 0))
 			{		     
@@ -822,9 +825,9 @@ void EventHandler::getNewEvents(long int conn_id)
   if (DEBUG)
     (*out)<<"Getting new events for conn "<<conn_id<<" next event time is "<<nextEventTime<<std::endl;
 
-  if (nextEventTime >= 0)
+  if (nextEventTime >= 0 || (*connStats)[conn_id].state == DONE)
     connToStalled[conn_id] = false;
-  else
+  else if((*connStats)[conn_id].state != DONE)
     connToStalled[conn_id] = true;
   
   while (nextEventTime >= 0)

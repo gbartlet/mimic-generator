@@ -378,13 +378,13 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	  if (connToServerString.find(dispatchJob.conn_id) != connToServerString.end())
 	    {
 	      serverToCounter[connToServerString[dispatchJob.conn_id]] --;
-	      /*connToServerString.erase(dispatchJob.conn_id); Jelena, this should be here
+	      connToServerString.erase(dispatchJob.conn_id); 
 	      sockfdToConnIDMap.erase(dispatchJob.sockfd);
 	      connToSockfdIDMap.erase(dispatchJob.conn_id);
 	      connToWaitingToRecv.erase(dispatchJob.conn_id);
 	      connToWaitingToSend.erase(dispatchJob.conn_id);
 	      connToStalled.erase(dispatchJob.conn_id);
-	      connToLastPlannedEvent.erase(dispatchJob.conn_id);*/
+	      connToLastPlannedEvent.erase(dispatchJob.conn_id);
 	    }
 	  if (DEBUG)
 	    (*out)<<"Closed sock "<<dispatchJob.sockfd<<" for conn "<<dispatchJob.conn_id<<" last completed "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
@@ -466,7 +466,7 @@ void EventHandler::checkStalledConns(long int now)
 void EventHandler::checkOrphanConns(long int now)
 {
   // Go through conns and try to load more events if there are any
-  for (auto it = orphanConn.begin(); it != orphanConn.end(); it++)
+  for (auto it = orphanConn.begin(); it != orphanConn.end(); )
     {
       if (DEBUG)
 	(*out)<<"Checking orphaned conn "<<it->first<<std::endl;
@@ -482,12 +482,20 @@ void EventHandler::checkOrphanConns(long int now)
 	  (*connStats)[conn_id].state = EST;
 	  (*connStats)[conn_id].last_completed++;
 	  getNewEvents(sit->second);
+	  auto dit = it;
+	  it++;
+	  orphanConn.erase(dit);
 	}
+      else
+	it++;
     }
 }
 
 void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime) {
   long int now = msSinceStart(startTime);
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(startTime.time_since_epoch()).count();
+  if (DEBUG)
+    (*out)<<"EH: looping, start time is "<<ms<<" now is "<<now<<std::endl;
   // Allocate a really big buffer filled with a's
   char* buf = (char*)malloc(MAXLEN);
   memset(buf, 'a', MAXLEN);
@@ -774,7 +782,9 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  {
 	    idle++;
 	    if (idle > ITHRESH)
-	      usleep(ITHRESH*1000);
+	      {
+		usleep(ITHRESH*8000);
+	      }
 	  }
 	else
 	  idle = 0;

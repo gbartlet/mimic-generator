@@ -478,7 +478,6 @@ int main(int argc, char* argv[]) {
     //isRunning.store(true);    
     
     // Start rest of our threads.
-    std::chrono::high_resolution_clock::time_point startPoint = std::chrono::high_resolution_clock::now();
     /* File worker. */
     //std::thread fileWorkerThread(&FileWorker::loop, fw, startPoint);
     //std::thread fileWorkerThread2(&FileWorker::loop, fw2, startPoint);
@@ -494,6 +493,8 @@ int main(int argc, char* argv[]) {
       informPeer();
     else
       waitForPeer();
+
+    std::chrono::high_resolution_clock::time_point startPoint = std::chrono::high_resolution_clock::now();
 
     for (int i=0; i<numThreads.load(); i++)
       {

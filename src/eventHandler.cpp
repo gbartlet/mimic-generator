@@ -166,11 +166,18 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	       try
 		 {
 		   int n = recv(dispatchJob.sockfd, buf, MAXLEN, 0);
-		   if (n > 0)
+		   int total = 0;
+		   while (n == MAXLEN)
+		     {
+		       total += n;
+		       n = recv(dispatchJob.sockfd, buf, MAXLEN, 0);
+		     }
+		   total += n;
+		   if (total > 0)
 		     {
 		       if (DEBUG)
-			 (*out)<<"RECVd 1 "<<n<<" bytes for conn "<<dispatchJob.conn_id<<std::endl;
-		       connToWaitingToRecv[dispatchJob.conn_id] -= n;
+			 (*out)<<"RECVd 1 "<<total<<" bytes for conn "<<dispatchJob.conn_id<<std::endl;
+		       connToWaitingToRecv[dispatchJob.conn_id] -= total;
 		       // if (connToWaitingToRecv[dispatchJob.conn_id] < 0) // weird case
 		       //connToWaitingToRecv[dispatchJob.conn_id] = 0;
 		       if (DEBUG)
@@ -741,19 +748,16 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 		(*out)<<"Possibly handling a RECV event for conn "<<conn_id<<" on sock "<<fd<<std::endl;
 	      try
 		{
-		  int total = 0;
-		  int n = 0;
-		  //do
-		  //{
-		  n = recv(fd, buf, MAXLEN, 0);
-		  if (DEBUG)
-		    (*out)<<"RECVd 2 "<<n<<" bytes for conn "<<conn_id<<std::endl;
-		  //   if (n > 0)
-		  //total += n;
-		  //}while(n > 0);
-		  total = n;
-		  if (DEBUG)
-		    (*out)<<"RECVd 2 "<<total<<" bytes for conn "<<conn_id<<std::endl;
+		   int n = recv(fd, buf, MAXLEN, 0);
+		   int total = 0;
+		   while (n == MAXLEN)
+		     {
+		       total += n;
+		       n = recv(fd, buf, MAXLEN, 0);
+		     }
+		   total += n;
+		   if (DEBUG)
+		     (*out)<<"RECVd 2 "<<total<<" bytes for conn "<<conn_id<<std::endl;
 
 		  if (total > 0)		
 		    {

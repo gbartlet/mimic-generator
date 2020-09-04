@@ -537,7 +537,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	/* warn the FileWorker that it should top off the file event queue. 		*/
 	Event dispatchJob = *job;
 	if (DEBUG)
-	  (*out)<< "File Event handler GOT JOB " << EventNames[dispatchJob.type] <<" serverstring "<<dispatchJob.serverString<<" conn "<<dispatchJob.conn_id<<" event id "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<" server "<<dispatchJob.serverString<<" left in queue "<<incomingFileEvents->getLength()<<std::endl;
+	  (*out)<< "File Event handler GOT JOB " << EventNames[dispatchJob.type] <<" serverstring "<<dispatchJob.serverString<<" conn "<<dispatchJob.conn_id<<" event id "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" now "<<now<<" value "<<dispatchJob.value<<" server "<<dispatchJob.serverString<<" left in queue "<<incomingFileEvents->getLength()<<std::endl;
 	if (dispatchJob.type == SEND || dispatchJob.type == RECV || dispatchJob.type == CLOSE)
 	  connToEventQueue[dispatchJob.conn_id].addEvent(dispatchJob);
 	else
@@ -579,7 +579,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  fileEventsHandledCount++;
 	  if(true){ // this was if (bool = got a job)
 	    if (DEBUG)
-	      (*out)<< "Heap Event handler GOT JOB " << EventNames[dispatchJob.type] <<" server "<<dispatchJob.serverString<<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" value "<<dispatchJob.value<<" events handled "<<fileEventsHandledCount<<std::endl;
+	      (*out)<< "Heap Event handler GOT JOB " << EventNames[dispatchJob.type] <<" server "<<dispatchJob.serverString<<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" now "<<now<<" value "<<dispatchJob.value<<" events handled "<<fileEventsHandledCount<<std::endl;
 
                 dispatch(dispatchJob, now);
                 nextHeapEventTime = eventsToHandle->nextEventTime();
@@ -652,12 +652,15 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 			(*out)<<"Nothing more to accept\n";
 		      break;
 		    }
-		  connState[conn_id] = EST;
-		  (*connStats)[conn_id].state = EST;
-		  (*connStats)[conn_id].last_completed++;
-		  if (DEBUG)
-		    (*out)<<"For conn "<<conn_id<<" State is now "<<connState[conn_id]<<" last completed 3 "<<(*connStats)[conn_id].last_completed<<std::endl;
-		  getNewEvents(conn_id);
+		  else if (conn_id >= 0)
+		    {
+		      connState[conn_id] = EST;
+		      (*connStats)[conn_id].state = EST;
+		      (*connStats)[conn_id].last_completed++;
+		      if (DEBUG)
+			(*out)<<"For conn "<<conn_id<<" State is now "<<connState[conn_id]<<" last completed 3 "<<(*connStats)[conn_id].last_completed<<std::endl;
+		      getNewEvents(conn_id);
+		    }
 		};
 	      continue;
 	    }
@@ -738,19 +741,24 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 		(*out)<<"Possibly handling a RECV event for conn "<<conn_id<<" on sock "<<fd<<std::endl;
 	      try
 		{
-		  int n = recv(fd, buf, MAXLEN, 0);
+		  int total = 0;
+		  int n = 0;
+		  //do
+		  //{
+		  n = recv(fd, buf, MAXLEN, 0);
 		  if (DEBUG)
 		    (*out)<<"RECVd 2 "<<n<<" bytes for conn "<<conn_id<<std::endl;
-		  if (n < 0)
-		    {
-		      char errmsg[200];
-		      sprintf(errmsg, "recv failed on conn %d socket %d\n", conn_id, fd);
-		      perror(errmsg);
-		    }
-		  if (n > 0)		
+		  //   if (n > 0)
+		  //total += n;
+		  //}while(n > 0);
+		  total = n;
+		  if (DEBUG)
+		    (*out)<<"RECVd 2 "<<total<<" bytes for conn "<<conn_id<<std::endl;
+
+		  if (total > 0)		
 		    {
 		      long int waited = connToWaitingToRecv[conn_id];
-		      connToWaitingToRecv[conn_id] -= n;
+		      connToWaitingToRecv[conn_id] -= total;
 		      //if (connToWaitingToRecv[conn_id] < 0) // weird case
 		      // connToWaitingToRecv[conn_id] = 0;
 		      if (DEBUG)

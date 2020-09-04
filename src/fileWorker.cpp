@@ -279,7 +279,7 @@ void FileWorker::loadEvents(int eventsToGet) {
 	      e.ms_from_start = 0;
 	      e.ms_from_last_event = 0;
 	      if(isMyIP(src)) {
-                e.ms_from_start = stod(eventData[i][7])*1000;
+                e.ms_from_start = stod(eventData[i][7])*1000 + SRV_UPSTART;
                 e.type = CONNECT;
 		if (DEBUG)
 		  std::cout<<"Adding connect event for conn "<<e.conn_id<<"\n";
@@ -290,7 +290,7 @@ void FileWorker::loadEvents(int eventsToGet) {
 	      else {
                 /* XXX Have we started a server for this IP:port yet? If not, add event. */
 		(*connStats)[e.conn_id].total_events = 1;
-		e.ms_from_start =  std::max((long int)(std::stod(eventData[i][7].c_str()) * 1000 - SRV_UPSTART), (long int) 0);
+		e.ms_from_start =  std::max((long int)(std::stod(eventData[i][7].c_str()) * 1000), (long int) 0);
 		e.event_id = -2;
                 e.type = SRV_START;
 		if (DEBUG)

@@ -607,7 +607,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	
 	//(*out)<<"Handled "<<fileEventsHandledCount<<" max "<<maxQueuedFileEvents<<" last event "<<lastEventCountWhenRequestingForMore<<" fehc "<<fileEventsHandledCount<<" left in queue "<<incomingFileEvents->getLength()<<std::endl;
 	//if((fileEventsHandledCount > (maxQueuedFileEvents/10) || incomingFileEvents->getLength() < maxQueuedFileEvents/2) && requested == false) this works
-	if((fileEventsHandledCount > fileEvents/2 || incomingFileEvents->getLength() < fileEvents/2)  && requested == false)
+	if((fileEventsHandledCount > fileEvents/2 || incomingFileEvents->getLength() < fileEvents/2))//  && requested == false)
 	  {//
 	  //if((fileEventsHandledCount > (fileEvents/2) || incomingFileEvents->getLength() < maxQueuedFileEvents/2 && lastEventCountWhenRequestingForMore + fileEvents/10 < fileEventsHandledCount)) {
 	  lastEventCountWhenRequestingForMore += fileEventsHandledCount;

@@ -313,6 +313,7 @@ void informPeer()
 
 int main(int argc, char* argv[]) {
 
+  char myName[SHORTLEN], filename[MEDLEN];
     signal(SIGINT, signal_callback_handler);
   
     int numConns = 1000;
@@ -429,8 +430,10 @@ int main(int argc, char* argv[]) {
     //eFiles2.push_back(eventFile);
     std::unordered_map<long int, long int> c2time;
     std::unordered_map<std::string, long int> l2time;
-    
-    FileWorker* fw = new FileWorker(loadMoreNotifier, &c2time, &l2time, fileQ, acceptQ, ipFile, eFiles, &connStats, numThreads.load(), DEBUG, true);
+
+    gethostname(myName, SHORTLEN);
+    sprintf(filename, "file.%s.txt", myName);
+    FileWorker* fw = new FileWorker(loadMoreNotifier, &c2time, &l2time, fileQ, acceptQ, ipFile, eFiles, &connStats, numThreads.load(), DEBUG, filename, true);
     fw->startup();
     ConnectionPairMap * ConnIDtoConnectionPairMap = fw->getConnectionPairMap();
     //FileWorker* fw2 = new FileWorker(loadMoreNotifier, fileQ2, acceptQ, &c2eq2, ipFile, connFile2, eFiles2);
@@ -458,8 +461,7 @@ int main(int argc, char* argv[]) {
     std::cout<<"Final num threads "<<numThreads.load()<<std::endl;
     EventHandler** eh = (EventHandler**)malloc(numThreads.load()*sizeof(EventHandler*));
     
-    char myName[SHORTLEN], filename[MEDLEN];
-    gethostname(myName, SHORTLEN);
+
   
     for (int i=0;i<numThreads.load();i++)
       {

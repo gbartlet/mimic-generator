@@ -34,7 +34,9 @@ class FileWorker {
         PollHandler* loadEventsPollHandler;
     
         long int fileEventsAddedCount;
-	//int numThreads;
+		
+	/* For logging */
+	std::ofstream* out;
 	
         /* File worker thread - takes in files and prodcues queue of events. */
         EventQueue** outEvents;
@@ -43,8 +45,9 @@ class FileWorker {
         std::vector <std::vector <std::string>> loadMMapFile(void * mmapData, int numFields, int numRecords);
         bool isMyIP(std::string IP);
         bool isMyConnID(long int connID);
-        void loadEvents(int howmany);
+        void loadEvents(int howmany, int rounds);
 	int findMin();
+	int rounds = 0;
 	bool isDone = false;
 	bool isProcessed = false;
 	
@@ -97,7 +100,7 @@ class FileWorker {
 
 
     public:
-        FileWorker(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::string& ipFile, std::vector<std::string>& eFiles, std::unordered_map<long int, struct stats>* cs, int nt, bool debug,  bool useMMap=true);
+        FileWorker(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue** out, EventQueue* accept, std::string& ipFile, std::vector<std::string>& eFiles, std::unordered_map<long int, struct stats>* cs, int nt, bool debug, std::string myname, bool useMMap=true);
         ~FileWorker();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

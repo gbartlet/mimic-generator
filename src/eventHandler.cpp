@@ -607,7 +607,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	
 	//(*out)<<"Handled "<<fileEventsHandledCount<<" max "<<maxQueuedFileEvents<<" last event "<<lastEventCountWhenRequestingForMore<<" fehc "<<fileEventsHandledCount<<" left in queue "<<incomingFileEvents->getLength()<<std::endl;
 	//if((fileEventsHandledCount > (maxQueuedFileEvents/10) || incomingFileEvents->getLength() < maxQueuedFileEvents/2) && requested == false) this works
-	if((fileEventsHandledCount > fileEvents/2 || incomingFileEvents->getLength() < fileEvents/2))//  && requested == false)
+	if((fileEventsHandledCount > fileEvents/2 || incomingFileEvents->getLength() < fileEvents/2 || nextEventTime < 0))//  && requested == false)
 	  {//
 	  //if((fileEventsHandledCount > (fileEvents/2) || incomingFileEvents->getLength() < maxQueuedFileEvents/2 && lastEventCountWhenRequestingForMore + fileEvents/10 < fileEventsHandledCount)) {
 	  lastEventCountWhenRequestingForMore += fileEventsHandledCount;
@@ -822,9 +822,9 @@ void EventHandler::getNewEvents(long int conn_id)
   if (DEBUG)
     (*out)<<"Getting new events for conn "<<conn_id<<" next event time is "<<nextEventTime<<std::endl;
 
-  if (nextEventTime >= 0)
+  if (nextEventTime >= 0) // ||  (*connStats)[conn_id].state == DONE)
     connToStalled[conn_id] = false;
-  else
+  else //if (nextEventTime < 0 &&  (*connStats)[conn_id].state != DONE)
     connToStalled[conn_id] = true;
   
   while (nextEventTime >= 0)

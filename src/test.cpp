@@ -223,7 +223,6 @@ void print_stats()
 }
 
 
-// Define the function to be called when ctrl-c (SIGINT) is sent to process
 void signal_callback_handler(int signum) {
   std::cout << "Caught signal " << signum << std::endl;
    // Terminate program
@@ -313,7 +312,7 @@ void informPeer()
 
 int main(int argc, char* argv[]) {
 
-  char myName[SHORTLEN], filename[MEDLEN];
+    char myName[SHORTLEN], filename[MEDLEN];
     signal(SIGINT, signal_callback_handler);
   
     int numConns = 1000;
@@ -503,7 +502,8 @@ int main(int argc, char* argv[]) {
 	eventHandlerThread[i] = new std::thread(&EventHandler::loop, eh[i], startPoint);
       }
     //std::thread eventHandlerThread2(&EventHandler::loop, eh2, startPoint);
-    
+
+    /*
     fileWorkerThread.join();
 
     try
@@ -515,6 +515,7 @@ int main(int argc, char* argv[]) {
       {
 	std::cout<<"Thread died "<<e.what()<<std::endl;
       }
+    */
     /*
     EventQueue* eq = new EventQueue();
     std::thread connThread(connectionHandlerThread,numConns, sendQ);
@@ -528,7 +529,10 @@ int main(int argc, char* argv[]) {
     */
 
     while(true)
-      sleep(1);
+      {
+	sleep(1);
+	std::cout<<"Running "<<std::endl;
+      }
 
 
 

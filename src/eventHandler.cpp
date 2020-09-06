@@ -6,7 +6,7 @@
 #include "eventHandler.h"
 #include "connections.h"
 
-#define MAX_BACKLOG_PER_SRV 100
+#define MAX_BACKLOG_PER_SRV 1000
 
 /* We start 3 threads */
 /*	- a server thread (takes in start/stop req, produces accepted events.)  */
@@ -264,12 +264,18 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	(*out)<<"Handling SEND event waiting to send "<<connToWaitingToSend[dispatchJob.conn_id]<<" on sock "<<dispatchJob.sockfd<<std::endl;
 
       // Try to send
+
       while (connToWaitingToSend[dispatchJob.conn_id] > 0)
 	{
 	  if (DEBUG)
-	    (*out)<<"Went into send\n";
+	    (*out)<<"Went into send for conn "<<dispatchJob.conn_id<<"\n";
 	  try{
-	    int n = send(dispatchJob.sockfd, buf, connToWaitingToSend[dispatchJob.conn_id], 0);
+	    long int tosend = connToWaitingToSend[dispatchJob.conn_id];
+	    if (tosend > MAXLEN)
+	      tosend = MAXLEN;
+	    if (DEBUG)
+	      (*out)<<dispatchJob.conn_id<<" will try to send "<<tosend<<"\n";
+	    int n = send(dispatchJob.sockfd, buf, tosend, 0);
 	    if (DEBUG)
 	      (*out)<<"n is "<<n<<"\n";
 	    if (n < 0)

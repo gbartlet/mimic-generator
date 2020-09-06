@@ -468,7 +468,9 @@ void EventHandler::checkStalledConns(long int now)
   for (auto it = connToSockfdIDMap.begin(); it != connToSockfdIDMap.end(); it++)
     {
       if (DEBUG)
-	(*out)<<"Checking conn "<<it->first<<" waiting to send "<<connToWaitingToSend[it->first]<<" and to recv "<<connToWaitingToRecv[it->first]<<" state "<<connState[it->first]<<" stalled "<<connToStalled[it->first]<<std::endl; 
+	(*out)<<"Checking conn "<<it->first<<" waiting to send "<<connToWaitingToSend[it->first]<<" and to recv "<<connToWaitingToRecv[it->first]<<" state "<<connState[it->first]<<" stalled "<<connToStalled[it->first]<<std::endl;
+      if (connToWaitingToSend[it->first] > 0)
+	myPollHandler->watchForWrite(connToSockfdIDMap[it->first]);
       if (connToWaitingToSend[it->first] <= 0 &&  connToWaitingToRecv[it->first] <= 0 && connState[it->first] != DONE && connToStalled[it->first])
 	{
 	  getNewEvents(it->first);

@@ -198,19 +198,25 @@ void connectionHandlerThread(int numConns, EventQueue* eq) {
 
 std::unordered_map<long int, struct stats> connStats;
 
-void print_stats()
+
+void print_stats(int flag)
 {
-  char myName[SHORTLEN], filename[MEDLEN];
-  gethostname(myName, SHORTLEN);
-  sprintf(filename, "connstats.%s.txt", myName);
   std::ofstream myfile;
-  myfile.open(filename);
+
+  if (flag)
+    {
+      char myName[SHORTLEN], filename[MEDLEN];
+      gethostname(myName, SHORTLEN);
+      sprintf(filename, "connstats.%s.txt", myName);
+      myfile.open(filename);
+    }
   int completed = 0, total = 0;
   int delay = 0;
   for (auto it=connStats.begin(); it != connStats.end(); it++)
     {
       total++;
-      myfile<<"Conn "<<it->first<<" state "<<it->second.state<<" total events "<<it->second.total_events<<" last event "<<it->second.last_completed<<" delay "<<it->second.delay<<std::endl;
+      if (flag)
+	myfile<<"Conn "<<it->first<<" state "<<it->second.state<<" total events "<<it->second.total_events<<" last event "<<it->second.last_completed<<" delay "<<it->second.delay<<std::endl;
       if (it->second.state == DONE)
 	{
 	  completed++;
@@ -219,14 +225,15 @@ void print_stats()
     }
   double avgd = (double)delay/completed;
   std::cout<<"Successfully completed "<<completed<<"/"<<total<<" avg delay "<<avgd<<" ms"<<std::endl;
-  myfile.close();
+  if (flag)
+    myfile.close();
 }
 
 
 void signal_callback_handler(int signum) {
   std::cout << "Caught signal " << signum << std::endl;
    // Terminate program
-   print_stats();
+   print_stats(true);
    exit(signum);
 }
 
@@ -531,7 +538,7 @@ int main(int argc, char* argv[]) {
     while(true)
       {
 	sleep(1);
-	std::cout<<"Running "<<std::endl;
+	print_stats(false);
       }
 
 

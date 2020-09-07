@@ -259,8 +259,8 @@ void FileWorker::loadEvents(int eventsToGet, int rounds) {
 	    sprintf(ports, "%d", sport);
 	    std::string servString = dst + ":" + portd;
 	    std::string connString = src + ":" + ports+","+dst+":"+portd;
-	    if (DEBUG)
-	      (*out) << "Check if IP '" << src << "' and '" << dst << "' are in my connections." << std::endl;
+	    //if (DEBUG)
+	    //(*out) << "Check if IP '" << src << "' and '" << dst << "' are in my connections." << std::endl;
 	    if(isMyIP(src) || isMyIP(dst)) {
 	      /* Add this connid to our ids.*/
 	      if (DEBUG)
@@ -458,52 +458,39 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
     //shortTermHeap->print();
 
     while(isRunning.load()) {
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	if (DEBUG)
+	  (*out)<<"MS "<<ms<<" looping\n";
         nextET = shortTermHeap->nextEventTime();
 	if (DEBUG)
 	  (*out) << "Pulling from our heap, next event time in heap is: " << nextET << " Last event time: " << lastEventTime << std::endl;
         while(nextET <= lastEventTime && nextET > -1) {
 	  Event e = shortTermHeap->nextEvent();
-	  if (DEBUG)
-	    (*out) << "Have event to add of type " << EventNames[e.type] <<" time "<<nextET<<std::endl;
+	  //if (DEBUG)
+	  //(*out) << "Have event to add of type " << EventNames[e.type] <<" time "<<nextET<<std::endl;
 	  if (DEBUG)
 	    (*out) << "Adding event with time: " << shortTermHeap->nextEventTime() << " time of last event added " << lastEventTime <<  std::endl;
 	  std::shared_ptr<Event> e_shr = std::make_shared<Event>(e);
 	  int t;
-	  if (connIDToThread.find(e.conn_id) != connIDToThread.end() && (e.type != SRV_START && e.type != SRV_END))
+	  if (connIDToThread.find(e.conn_id) != connIDToThread.end())
 	    {
 	      t = connIDToThread[e.conn_id];
 	    }
 	  else
 	    {
-	      // Check if this connection is for existing
-	      // server string. Jelena
-	      if (e.type == SRV_START || e.type == SRV_END)
+	      t = findMin();
+	      if (DEBUG)
+		(*out)<<"Found new thread "<<t<<" for conn "<<e.conn_id<<std::endl;
+	      if (e.type == SRV_START)
 		{
+		  servStringToThread[e.serverString].insert(t);
 		  if (DEBUG)
-		    (*out)<<"Handling event of type "<<EventNames[e.type]<<" serv string "<<e.serverString<<std::endl;
-		  if (servStringToThread.find(e.serverString) != servStringToThread.end())
-		    {
-		      t = servStringToThread[e.serverString];
-		      if (DEBUG)
-			(*out)<<"Found existing thread "<<t<<std::endl;
-		    }
-		  else
-		    {
-		      t = findMin();
-		      servStringToThread[e.serverString] = t;
-		      if (DEBUG)
-			(*out)<<"Found new thread "<<t<<std::endl;
-		    }
-		  threadToConnCount[t]++;
+		    (*out)<<"Pushed thread "<<t<<" for servser strign "<<e.serverString<<std::endl;
 		}
-	      else
-		{
-		  t = findMin();
-		  if (DEBUG)
-		    (*out)<<"Found new thread "<<t<<std::endl;
-		}
+	      threadToConnCount[t]++;
 	      connIDToThread[e.conn_id] = t;
 	    }
+	  threadToEventCount[t]++;
 	  // Figure out if we'll add SRV_START or not
 	  if (e.type == SRV_START)
 	    {
@@ -511,7 +498,6 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 		{
 		  (*listenerTime)[e.serverString] = e.ms_from_start;
 		  outEvents[t]->addEvent(e_shr);
-		  threadToEventCount[t]++;
 		}
 		/* Jelena
 	      else if(e.ms_from_start > (*listenerTime)[e.serverString] + SRV_GAP)
@@ -545,9 +531,21 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	  else
 	    {	      
 	      outEvents[t]->addEvent(e_shr);
-	      threadToEventCount[t]++;
-	      if (DEBUG)
-		(*out)<<"Added event "<<e.event_id<<" for conn "<<e.conn_id<<" type "<<EventNames[e.type]<<" to thread "<<t<<std::endl;
+	      if (connIDToServString.find(e.conn_id) != connIDToServString.end())
+		{
+		  std::string servString = connIDToServString[e.conn_id];
+		  for(auto it=servStringToThread[servString].begin(); it != servStringToThread[servString].end(); it++)
+		    {
+		      if ((*it) != t)
+			{
+			  outEvents[*it]->addEvent(e_shr);
+			  //if (DEBUG)
+			  //(*out)<<"Also added event "<<e.event_id<<" for conn "<<e.conn_id<<" type "<<EventNames[e.type]<<" to thread "<<*it<<std::endl;
+			}
+		    }
+		}
+	      //if (DEBUG)
+	      //(*out)<<"Added event "<<e.event_id<<" for conn "<<e.conn_id<<" type "<<EventNames[e.type]<<" to thread "<<t<<std::endl;
 	    }
 	  e_shr.reset();
 	  fileEventsAddedCount++;
@@ -566,12 +564,13 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	  isInitd.store(true);
 	
         /* Maybe we should give it a rest for a bit. */
-        loadEventsPollHandler->waitForEvents();
+        loadEventsPollHandler->waitForEvents(1);
         
         struct epoll_event e;
         if(isRunning.load() && loadEventsPollHandler->nextEvent(&e)) {
+	  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 	  if (DEBUG)
-            (*out) << "Got notification to load more events." << std::endl;
+            (*out) <<"MS "<<ms<<" Got notification to load more events." << std::endl;
             while(loadEventsPollHandler->nextEvent(&e)) {
 	      if (DEBUG)
                 (*out) << "Got load notification from loadEventsNotifier." << std::endl;
@@ -579,6 +578,6 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
             }
             loadEvents(maxQueuedFileEvents, rounds++);
         }
-    }     
+    }    
 }
 

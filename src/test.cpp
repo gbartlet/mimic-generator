@@ -473,7 +473,7 @@ int main(int argc, char* argv[]) {
       {
 	sprintf(filename, "thread.%s.%d.txt", myName,i);
 	
-	eh[i] = new EventHandler(loadMoreNotifier, &c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap,  &connStats, DEBUG, filename);
+	eh[i] = new EventHandler(loadMoreNotifier, &c2time, &l2time, fileQ[i], acceptQ, recvQ, sentQ, serverQ, sendQ, ConnIDtoConnectionPairMap,  &connStats, i, DEBUG, filename);
 	
 	eh[i]->startup();
       }

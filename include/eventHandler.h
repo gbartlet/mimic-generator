@@ -27,6 +27,7 @@ class EventHandler {
         /* 	- a send thread (takes in send/connect req, produces sent event). 	*/
         /* 	  out: connid (value) map: none, add value		*/
 
+        int myID;
         long int fileEventsHandledCount;       
         long int lastEventCountWhenRequestingForMore;
 
@@ -87,7 +88,7 @@ class EventHandler {
 	bool DEBUG = 0;
 	
     public:
-        EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, bool debug, std::string myname);
+        EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, int id, bool debug, std::string myname);
         ~EventHandler();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

@@ -355,7 +355,6 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
       if (DEBUG)
 	(*out)<<"Listening on sock "<<sockfd<<" for server "<<dispatchJob.serverString<<std::endl;
       myPollHandler->watchForRead(sockfd);
-	   
       break;
     }
 
@@ -952,12 +951,13 @@ long int EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int 
     return conn_id; // Jelena    
 }
 
-EventHandler::EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, bool debug, std::string myname) {
+EventHandler::EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, int id, bool debug, std::string myname) {
 
     fileEventsHandledCount = 0;
     lastEventCountWhenRequestingForMore = 0;
     out = new std::ofstream(myname);
-
+    myID = id;
+    
     connIDToConnectionMap = ConnMap;
     incomingFileEvents = fe;
     requestMoreFileEvents = loadMoreNotifier;

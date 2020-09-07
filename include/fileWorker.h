@@ -57,7 +57,7 @@ class FileWorker {
         std::unordered_map<std::string, bool> srvStringToStartBoolMap;
 	std::unordered_map<long int, int> connIDToThread;
 	std::unordered_map<long int, std::string> connIDToServString;
-	std::unordered_map<std::string, int> servStringToThread;
+	std::unordered_map<std::string, std::unordered_set <int>> servStringToThread;
 	std::unordered_map<long int, int> threadToEventCount;
 	std::unordered_map<long int, int> threadToConnCount;
 	

@@ -453,10 +453,6 @@ void EventHandler::storeConnections()
     }
     constring.clear();
   }
-  for(const auto& pair:strToConnID) {
-    if (DEBUG)
-      (*out)<< "Conn string " << pair.first << " has id " << pair.second << std::endl;
-  }
 }
 
 bool EventHandler::startup() {
@@ -619,6 +615,8 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	
 	//(*out)<<"Handled "<<fileEventsHandledCount<<" max "<<maxQueuedFileEvents<<" last event "<<lastEventCountWhenRequestingForMore<<" fehc "<<fileEventsHandledCount<<" left in queue "<<incomingFileEvents->getLength()<<std::endl;
 	//if((fileEventsHandledCount > (maxQueuedFileEvents/10) || incomingFileEvents->getLength() < maxQueuedFileEvents/2) && requested == false) this works
+	if (DEBUG)
+	  (*out)<<"fileEventsHandledCount "<<fileEventsHandledCount<<" file events "<<fileEvents<<" incoming length "<<incomingFileEvents->getLength()<<" nextEventtime "<<nextEventTime<<std::endl;
 	if((fileEventsHandledCount > fileEvents/2 || incomingFileEvents->getLength() < fileEvents/2 || nextEventTime < 0))//  && requested == false)
 	  {//
 	  //if((fileEventsHandledCount > (fileEvents/2) || incomingFileEvents->getLength() < maxQueuedFileEvents/2 && lastEventCountWhenRequestingForMore + fileEvents/10 < fileEventsHandledCount)) {
@@ -807,7 +805,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	    idle++;
 	    if (idle > ITHRESH)
 	      {
-		usleep(ITHRESH*8000);
+		usleep(ITHRESH*1000);
 	      }
 	  }
 	else
@@ -925,20 +923,8 @@ long int EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int 
     if(it == strToConnID.end()) {
       (*out) << "Got connection but could not look up connID." << std::endl;
 
-      // Try again
-      storeConnections();
-      auto ait = strToConnID.find(connString);
-      if (ait == strToConnID.end())
-	{
-	  (*out)<<"Were not able to look up connID." <<std::endl;
-	  orphanConn[connString] = newSockfd;
-	  return -2; 
-	}
-      else
-	{
-	  (*out)<<"Managed to find connection "<<ait->second;
-	  it = ait;
-	}
+      orphanConn[connString] = newSockfd;
+      return -2; 
     }
     long int conn_id = it->second;
     

@@ -239,6 +239,8 @@ void FileWorker::loadEvents(int eventsToGet, int rounds) {
     std::vector<int>::size_type i = lastLine;
       
     for(;i < eventData.size(); i++) {
+      eventsProduced = eventsProduced + 1;
+
       // Check if this is CONN record or event record
       if (eventData[i][0] == "CONN")
 	{
@@ -265,12 +267,18 @@ void FileWorker::loadEvents(int eventsToGet, int rounds) {
 	      /* Add this connid to our ids.*/
 	      if (DEBUG)
 		(*out) << "Adding " << connID << " to my connection ids." << std::endl;
+	      
 	      myConnIDs.insert(connID);
+	      if (DEBUG)
+		(*out) << "1\n";
 	      
 	      /* Fill out connIDToConnectionPairMap */
 	      connectionPair cp = connectionPair(src, sport, dst, dport);
+	      if (DEBUG)
+		(*out) << "2\n";
 	      connIDToConnectionPairMap[connID] = std::make_shared<connectionPair>(cp);
-	      
+	      if (DEBUG)
+		(*out) << "3\n";
 	      /* Add an event to start this connection. */
 	      Event e;
 	      e.serverString = servString;
@@ -280,6 +288,8 @@ void FileWorker::loadEvents(int eventsToGet, int rounds) {
 	      e.value = -1;
 	      e.ms_from_start = 0;
 	      e.ms_from_last_event = 0;
+	      if (DEBUG)
+		(*out) << "4\n";
 	      if(isMyIP(src)) {
                 e.ms_from_start = stod(eventData[i][7])*1000 + SRV_UPSTART;
                 e.type = CONNECT;
@@ -308,7 +318,6 @@ void FileWorker::loadEvents(int eventsToGet, int rounds) {
 		lastEventTime = e.ms_from_start+ loopedCount * loopDuration;
 	      if (DEBUG)
 		(*out)<<"Lastevent "<<lastEventTime<<std::endl;
-	      eventsProduced = eventsProduced + 1;
 	    }
 	    src.clear();
 	    dst.clear();
@@ -344,7 +353,6 @@ void FileWorker::loadEvents(int eventsToGet, int rounds) {
 
 		(*connTime)[e.conn_id] = e.ms_from_start;
 		shortTermHeap->addEvent(e);
-		eventsProduced = eventsProduced + 1;
 	      }
 	      lastEventTime = std::stod(eventData[i][7].c_str()) * 1000 + loopedCount * loopDuration;
 	      if (eventsProduced >= eventsToGet)
@@ -481,23 +489,34 @@ void FileWorker::loop(std::chrono::high_resolution_clock::time_point startTime) 
 	      t = findMin();
 	      if (DEBUG)
 		(*out)<<"Found new thread "<<t<<" for conn "<<e.conn_id<<std::endl;
+	      
+
 	      if (e.type == SRV_START)
 		{
-		  servStringToThread[e.serverString].insert(t);
-		  if (DEBUG)
-		    (*out)<<"Pushed thread "<<t<<" for servser strign "<<e.serverString<<std::endl;
+		  // SRV_START gets added to all threads since we
+		  // don't know which thread will get it
+		  for(int i=0; i<numThreads.load();i++)
+		    {
+		      servStringToThread[e.serverString].insert(i);
+		      if (DEBUG)
+			(*out)<<"Pushed thread "<<i<<" for servser strign "<<e.serverString<<std::endl;
+		      threadToConnCount[i]++;
+		    }
 		}
-	      threadToConnCount[t]++;
+	      else
+		threadToConnCount[t]++;
 	      connIDToThread[e.conn_id] = t;
 	    }
 	  threadToEventCount[t]++;
 	  // Figure out if we'll add SRV_START or not
 	  if (e.type == SRV_START)
 	    {
-	      //if (listenerTime->find(e.serverString) == listenerTime->end()) // Jelena
+	      // SRV_START gets added to all threads since we don't know who will get
+	      // the event from the OS
+	      for(int i=0; i<numThreads.load();i++)
 		{
 		  (*listenerTime)[e.serverString] = e.ms_from_start;
-		  outEvents[t]->addEvent(e_shr);
+		  outEvents[i]->addEvent(e_shr);
 		}
 		/* Jelena
 	      else if(e.ms_from_start > (*listenerTime)[e.serverString] + SRV_GAP)

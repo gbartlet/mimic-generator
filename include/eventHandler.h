@@ -9,8 +9,10 @@
 #include <sstream>
 #include <fcntl.h>
 #include <vector>
-#include <queue> 
+#include <queue>
+#include <map> 
 #include <unordered_map>
+#include <unordered_set>
 #include "eventQueue.h"
 #include "eventNotifier.h"
 #include "pollHandler.h"
@@ -52,10 +54,10 @@ class EventHandler {
         /* Data management structures. */
         ConnectionPairMap * connIDToConnectionMap;
         stringToConnIDMap strToConnID;
-        std::unordered_map<int, int long> sockfdToConnIDMap;
-	std::unordered_map<std::string, int long> serverToSockfd;
-	std::unordered_map<std::string, int long> serverToCounter;
-	std::unordered_map<int long, std::string> connToServerString;
+        std::unordered_map<int, long int> sockfdToConnIDMap;
+	std::unordered_map<std::string, long int> serverToSockfd;
+	std::unordered_map<std::string, long int> serverToCounter;
+	std::unordered_map<long int, std::string> connToServerString;
         std::unordered_map<long int, int> connToSockfdIDMap;
         std::unordered_map<long int, int> connToWaitingToRecv;
         std::unordered_map<long int, int> connToWaitingToSend;
@@ -69,7 +71,7 @@ class EventHandler {
 	std::unordered_map<std::string, long int>* listenerTime;
 	std::unordered_map<std::string, long int> srvStarted;
 	std::unordered_map<std::string, long int> orphanConn;
-	std::unordered_map<long int, struct stats>* connStats;
+	std::map<long int, struct stats>* connStats;
 	
         EventHeap waitHeap;
 
@@ -88,7 +90,7 @@ class EventHandler {
 	bool DEBUG = 0;
 	
     public:
-        EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, int id, bool debug, std::string myname);
+        EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::map<long int, struct stats>* cs, int id, bool debug, std::string myname);
         ~EventHandler();
         bool startup();
         void loop(std::chrono::high_resolution_clock::time_point startTime);

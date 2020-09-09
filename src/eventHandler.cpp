@@ -76,6 +76,7 @@ bool EventHandler::readyForEvent(long int connID, long int delta, long int now) 
 }
 
 void EventHandler::newConnectionUpdate(int sockfd, long int connID, long int planned, long int now) {
+  
   sockfdToConnIDMap[sockfd] = connID;
   connToSockfdIDMap[connID] = sockfd;
   connToWaitingToRecv[connID] = 0;
@@ -89,8 +90,9 @@ void EventHandler::newConnectionUpdate(int sockfd, long int connID, long int pla
       int delay = (now - connToLastPlannedEvent[connID]);
       if (delay > 0)
 	{
-	  connToDelay[connID] += delay;
+	  connToDelay[connID] += delay;	  
 	  (*connStats)[connID].delay = connToDelay[connID];
+	  (*out)<<" new data 1 for conn "<<connID<<" state "<<(*connStats)[connID].state<<std::endl;
 	}
       connToLastPlannedEvent[connID] = now;
     }
@@ -101,13 +103,15 @@ void EventHandler::newConnectionUpdate(int sockfd, long int connID, long int pla
 
 
 void EventHandler::connectionUpdate(long int connID, long int planned, long int now) {
+
   if (planned > 0)
     connToLastPlannedEvent[connID] = planned;
   else
     {
       connToDelay[connID] += (now - connToLastPlannedEvent[connID]);
-      connToLastPlannedEvent[connID] = now;
+      connToLastPlannedEvent[connID] = now;      
       (*connStats)[connID].delay = connToDelay[connID];
+      (*out)<<" new data 2 for conn "<<connID<<" state "<<(*connStats)[connID].state<<std::endl;
     }
   connToLastCompletedEvent[connID] = now;
   if (DEBUG)
@@ -127,7 +131,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
   
   if (DEBUG)
-    (*out)<<ms<<" EH: dispatch job type "<<EventNames[dispatchJob.type]<<" now "<<now<<std::endl;
+    (*out)<<ms<<" EH: dispatch job type "<<EventNames[dispatchJob.type]<<" conn "<<dispatchJob.conn_id<<" value "<<dispatchJob.value<<" now "<<now<<std::endl;
     switch(dispatchJob.type) {
         /* We note these as events in our connection structure. */
         case ACCEPT: {
@@ -147,7 +151,9 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
             break;
         }
         case RECV: {
+	  (*out)<<" new data 29 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 	  connectionUpdate(dispatchJob.conn_id, dispatchJob.ms_from_start, now);
+	  (*out)<<" new data 30 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 	  if (DEBUG)
 	    (*out)<<"RECV JOB waiting to recv "<<connToWaitingToRecv[dispatchJob.conn_id]<<" on conn "<<dispatchJob.conn_id<<" job value "<<dispatchJob.value<<std::endl;
 	   connToWaitingToRecv[dispatchJob.conn_id] = connToWaitingToRecv[dispatchJob.conn_id] + dispatchJob.value;
@@ -155,6 +161,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	   if (connToWaitingToRecv[dispatchJob.conn_id] <= 0)
 	     {
 	       (*connStats)[dispatchJob.conn_id].last_completed++;
+	       (*out)<<" new data 3 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 	       connectionUpdate(dispatchJob.conn_id, 0, now);
 	       getNewEvents(dispatchJob.conn_id);
 	       if (DEBUG)
@@ -190,6 +197,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 		       if (connToWaitingToRecv[dispatchJob.conn_id] <= 0)
 			 {
 			   (*connStats)[dispatchJob.conn_id].last_completed++;
+			   (*out)<<" new data 4 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 			   if (DEBUG)
 			     (*out)<<"For conn "<<dispatchJob.conn_id<<" last completed 8 "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
 			   connectionUpdate(dispatchJob.conn_id, 0, now);
@@ -218,52 +226,57 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
         case CONNECT: {
             /* Get our address. */
 	  connToLastPlannedEvent[dispatchJob.conn_id] = dispatchJob.ms_from_start;
-            auto it = connIDToConnectionMap->find(dispatchJob.conn_id);
-            if(it != connIDToConnectionMap->end()) {
-	        connState[dispatchJob.conn_id] = CONNECTING;
-		(*connStats)[dispatchJob.conn_id].state = CONNECTING;
-	        int sockfd = getIPv4TCPSock((const struct sockaddr_in *)&(it->second->src));
+	  //auto it = connIDToConnectionMap->find(dispatchJob.conn_id);
+	  if(true)
+	    {
+	      //it != connIDToConnectionMap->end()) {
+	      connState[dispatchJob.conn_id] = CONNECTING;
+	      (*connStats)[dispatchJob.conn_id].state = CONNECTING;
+	      (*out)<<" new data 10 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
+	      struct sockaddr_in caddr = getAddressFromString(dispatchJob.connString);
+	      struct sockaddr_in saddr = getAddressFromString(dispatchJob.serverString);
+	      int sockfd = getIPv4TCPSock((const struct sockaddr_in *)&caddr);
+	      if (DEBUG)
+		(*out)<<"Connecting on sock "<<sockfd<<" for conn "<<dispatchJob.conn_id<<" state "<<connState[dispatchJob.conn_id]<<std::endl;
+	      if(connect(sockfd, (const struct sockaddr *)&saddr, sizeof(struct sockaddr_in)) == -1) {
 		if (DEBUG)
-		  (*out)<<"Connecting on sock "<<sockfd<<" for conn "<<dispatchJob.conn_id<<" state "<<connState[dispatchJob.conn_id]<<std::endl;
-                if(connect(sockfd, (struct sockaddr *)&(it->second->dst), sizeof(struct sockaddr_in)) == -1) {
-		  if (DEBUG)
-		    (*out)<<"Didn't connect right away\n";
-		  if (errno != EINPROGRESS)
-		    {
-		      close(sockfd); // should return to pool and try later Jelena
-		      char errmsg[200];
-		      sprintf(errmsg, " connecting failed, conn %d src %s",dispatchJob.conn_id,inet_ntoa(it->second->src.sin_addr));
-			
-		      perror(errmsg);
-		      return;
-		    }
-		  else
-		    {
-		      myPollHandler->watchForWrite(sockfd);
-		      newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start, now);
-		    }
-		}
+		  (*out)<<"Didn't connect right away\n";
+		if (errno != EINPROGRESS)
+		  {
+		    close(sockfd); // should return to pool and try later Jelena
+		    char errmsg[200];
+		    sprintf(errmsg, " connecting failed, conn %d src %s",dispatchJob.conn_id,dispatchJob.serverString.c_str());
+		    perror(errmsg);
+		    return;
+		  }
 		else
 		  {
-		    connState[dispatchJob.conn_id] = EST;
+		    myPollHandler->watchForWrite(sockfd);
 		    newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start, now);
-		    (*connStats)[dispatchJob.conn_id].last_completed++;
-		    if (DEBUG)
-		      (*out)<<"Connected successfully 1 for conn "<<dispatchJob.conn_id<<" state is now "<<connState[dispatchJob.conn_id]<<" last completed 9 "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
-		    getNewEvents(dispatchJob.conn_id);
 		  }
-            }
-            else {
+	      }
+	      else
+		{
+		  connState[dispatchJob.conn_id] = EST;
+		  newConnectionUpdate(sockfd, dispatchJob.conn_id, dispatchJob.ms_from_start, now);
+		  (*connStats)[dispatchJob.conn_id].last_completed++;
+		  (*out)<<" new data 11 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
+		  if (DEBUG)
+		    (*out)<<"Connected successfully 1 for conn "<<dispatchJob.conn_id<<" state is now "<<connState[dispatchJob.conn_id]<<" last completed 9 "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
+		  getNewEvents(dispatchJob.conn_id);
+		  }
+	    }  
+	      else {
                 std::cerr << "Could not find connection info for connID " << dispatchJob.conn_id << std::endl;
                 return;
-            }
+	      }
             break;
         }
         /* Send thread handles these. */
     case SEND: {
       connectionUpdate(dispatchJob.conn_id, dispatchJob.ms_from_start, now);
       connToWaitingToSend[dispatchJob.conn_id] += dispatchJob.value;
-      if (DEBUG)
+      //if (DEBUG)
 	(*out)<<"Handling SEND event waiting to send "<<connToWaitingToSend[dispatchJob.conn_id]<<" on sock "<<dispatchJob.sockfd<<std::endl;
 
       // Try to send
@@ -306,6 +319,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
       if (connToWaitingToSend[dispatchJob.conn_id] == 0)
 	{
 	  (*connStats)[dispatchJob.conn_id].last_completed++;
+	  (*out)<<" new data 12 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 	  if (DEBUG)
 	    (*out)<<"For conn "<<dispatchJob.conn_id<<" last completed 1 "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
 	}
@@ -389,11 +403,14 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	  close(dispatchJob.sockfd);
 	  (*connStats)[dispatchJob.conn_id].state = DONE;
 	  (*connStats)[dispatchJob.conn_id].last_completed++;
+	  (*out)<<" new data 13 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 	  if (DEBUG)
 	    (*out)<<"For conn "<<dispatchJob.conn_id<<" last completed 2 "<<(*connStats)[dispatchJob.conn_id].last_completed<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 
 	  if (connToServerString.find(dispatchJob.conn_id) != connToServerString.end())
 	    {
+	      if (DEBUG)
+		(*out)<<" Deleting stats for conn "<<dispatchJob.conn_id<<"\n";
 	      serverToCounter[connToServerString[dispatchJob.conn_id]] --;
 	      connToServerString.erase(dispatchJob.conn_id); 
 	      sockfdToConnIDMap.erase(dispatchJob.sockfd);
@@ -405,6 +422,7 @@ void EventHandler::dispatch(Event dispatchJob, long int now) {
 	    }
 	  if (DEBUG)
 	    (*out)<<"Closed sock "<<dispatchJob.sockfd<<" for conn "<<dispatchJob.conn_id<<" last completed "<<(*connStats)[dispatchJob.conn_id].last_completed<<std::endl;
+	  (*out)<<" new data 15 for conn "<<dispatchJob.conn_id<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 	}
       // Jelena: clean all the connection state here but not stats
       break;
@@ -496,6 +514,7 @@ void EventHandler::checkOrphanConns(long int now)
 	  connState[conn_id] = EST;
 	  (*connStats)[conn_id].state = EST;
 	  (*connStats)[conn_id].last_completed++;
+	  (*out)<<" new data 16 for conn "<<conn_id<<" state "<<(*connStats)[conn_id].state<<std::endl;
 	  getNewEvents(sit->second);
 	  auto dit = it;
 	  it++;
@@ -594,7 +613,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	  fileEventsHandledCount++;
 	  if(true){ // this was if (bool = got a job)
 	    if (DEBUG)
-	      (*out)<< "Heap Event handler GOT JOB " << EventNames[dispatchJob.type] <<" server "<<dispatchJob.serverString<<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" now "<<now<<" value "<<dispatchJob.value<<" events handled "<<fileEventsHandledCount<<std::endl;
+	      (*out)<< "Heap Event handler GOT JOB " << EventNames[dispatchJob.type] <<" server "<<dispatchJob.serverString<<" conn "<<dispatchJob.conn_id<<" event "<<dispatchJob.event_id<<" ms from start "<<dispatchJob.ms_from_start<<" now "<<now<<" value "<<dispatchJob.value<<" events handled "<<fileEventsHandledCount<<" state "<<(*connStats)[dispatchJob.conn_id].state<<std::endl;
 
                 dispatch(dispatchJob, now);
                 nextHeapEventTime = eventsToHandle->nextEventTime();
@@ -674,6 +693,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 		      connState[conn_id] = EST;
 		      (*connStats)[conn_id].state = EST;
 		      (*connStats)[conn_id].last_completed++;
+		      (*out)<<" new data 5 for conn "<<conn_id<<" state "<<(*connStats)[conn_id].state<<std::endl;
 		      if (DEBUG)
 			(*out)<<"For conn "<<conn_id<<" State is now "<<connState[conn_id]<<" last completed 3 "<<(*connStats)[conn_id].last_completed<<std::endl;
 		      getNewEvents(conn_id);
@@ -697,6 +717,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	      connState[conn_id] = EST;
 	      (*connStats)[conn_id].state = EST;
 	      (*connStats)[conn_id].last_completed++;
+	      (*out)<<" new data 6 for conn "<<conn_id<<" state "<<(*connStats)[conn_id].state<<std::endl;
 	      if (DEBUG)
 		(*out)<<"Connected successfully, conn "<<conn_id<<" state is now "<<connState[conn_id]<<" last completed 4 "<<(*connStats)[conn_id].last_completed<<std::endl;
 	      getNewEvents(conn_id);
@@ -735,6 +756,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 			    {
 			      connectionUpdate(conn_id, 0, now);
 			      (*connStats)[conn_id].last_completed++; // here we could remember the event id instead of count
+			      (*out)<<" new data 7 for conn "<<conn_id<<" state "<<(*connStats)[conn_id].state<<std::endl;
 			      if (DEBUG)
 				(*out)<<"For conn "<<conn_id<<" last completed 5 "<<(*connStats)[conn_id].last_completed<<std::endl;
 			      getNewEvents(conn_id);
@@ -751,7 +773,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 	    {
 	      if ((poll_e->events & EPOLLHUP) || (poll_e->events & EPOLLERR))
 		{
-		  // Give up on this conn somehow, Jelena
+		  // Give up on this conn somehow, Jelena, try to receive because EPOLLIN was set
 		  continue;
 		}
 	      if (DEBUG)
@@ -783,6 +805,7 @@ void EventHandler::loop(std::chrono::high_resolution_clock::time_point startTime
 			{		     
 			  connectionUpdate(conn_id, 0, now);
 			  (*connStats)[conn_id].last_completed++; // here we could remember the event id instead of count Jelena check
+			  (*out)<<" new data 8 for conn "<<conn_id<<" state "<<(*connStats)[conn_id].state<<std::endl;
 			  if (DEBUG)
 			    (*out)<<"For conn "<<conn_id<<" last completed 6 "<<(*connStats)[conn_id].last_completed<<std::endl;
 			  getNewEvents(conn_id);
@@ -830,7 +853,7 @@ void EventHandler::getNewEvents(long int conn_id)
   myfile.close();*/
   // Jelena
   if (DEBUG)
-    (*out)<<"Getting new events for conn "<<conn_id<<" next event time is "<<nextEventTime<<std::endl;
+    (*out)<<"Getting new events for conn "<<conn_id<<" next event time is "<<nextEventTime<<" state "<<(*connStats)[conn_id].state<<std::endl;
 
 
   if (nextEventTime >= 0) // ||  (*connStats)[conn_id].state == DONE)
@@ -897,8 +920,6 @@ long int EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int 
         return -1;
     }
     
-
-
     /* Now figure out which connection we accepted. */
     /* Get info on the server socket we accepted on. */
     struct sockaddr sa_srv;
@@ -937,7 +958,7 @@ long int EventHandler::acceptNewConnection(struct epoll_event *poll_e, long int 
     return conn_id; // Jelena    
 }
 
-EventHandler::EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::unordered_map<long int, struct stats>* cs, int id, bool debug, std::string myname) {
+EventHandler::EventHandler(EventNotifier* loadMoreNotifier, std::unordered_map<long int, long int>* c2time, std::unordered_map<std::string, long int>* l2time, EventQueue* fe, EventQueue* ae, EventQueue* re, EventQueue* se, EventQueue * outserverQ, EventQueue * outSendQ, ConnectionPairMap* ConnMap, std::map<long int, struct stats>* cs, int id, bool debug, std::string myname) {
 
     fileEventsHandledCount = 0;
     lastEventCountWhenRequestingForMore = 0;

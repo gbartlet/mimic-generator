@@ -196,7 +196,7 @@ void connectionHandlerThread(int numConns, EventQueue* eq) {
     std::cout << "Read/write thread quitting." << std::endl;     
 }
 
-std::unordered_map<long int, struct stats> connStats;
+std::map<long int, struct stats> connStats;
 
 
 void print_stats(int flag)

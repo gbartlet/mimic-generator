@@ -10,6 +10,27 @@ connectionPair::connectionPair(std::string srcIP, int sport, std::string dstIP, 
     dst.sin_port = htons(dport);    
 }
 
+struct sockaddr_in getAddressFromString(std::string addrString)
+{
+  char c[MEDLEN];
+  strcpy(c,addrString.c_str());
+  int i;
+  for(i=0; i<strlen(c); i++)
+    {
+      if (c[i] == ':')
+	{
+	  c[i] = 0;
+	  break;
+	}
+    }
+  struct sockaddr_in saddr;
+  saddr.sin_family=AF_INET;
+  saddr.sin_port = htons(atoi(c+i+1));
+  inet_aton(c, &saddr.sin_addr);
+  bzero(saddr.sin_zero, 8);
+  return saddr;
+}
+
 bool connectionPair::operator==(const connectionPair a) const {                                      
     if((cmpSockAddrIn(&src, &(a.src))) && (cmpSockAddrIn(&dst, &(a.dst)))) return true;
     return false;       

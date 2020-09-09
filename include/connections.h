@@ -25,7 +25,10 @@ struct connectionPair {
   struct sockaddr_in dst; 
   connectionPair(std::string srcIP, int sport, std::string dstIP, int dport);    
   bool operator==(const connectionPair a) const;
+  
 };         
+
+struct sockaddr_in getAddressFromString(std::string addrString);
 
 typedef std::unordered_map<long int, std::shared_ptr<connectionPair>> ConnectionPairMap;
 
